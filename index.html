@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Duelo de Figuritas</title>
+<link href="https://fonts.googleapis.com/css2?family=Russo+One&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#14101c;--paper:#f3efe6;--gold:#ffc928}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;font-family:system-ui,sans-serif;color:var(--paper);background:repeating-linear-gradient(135deg,#2a1b4d 0 18px,#31215a 18px 36px);padding:12px;display:flex;justify-content:center}
+main{width:100%;max-width:860px}
+h1{font:1.6rem 'Russo One',Impact,sans-serif;margin:4px 0 8px;color:var(--gold);text-shadow:2px 2px 0 #000}
+h2{font:1.15rem 'Russo One',sans-serif;margin:6px 0 10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:10px}
+.fig{--c1:#f2a81d;--c2:#e8870c;position:relative;aspect-ratio:1.9;height:auto;max-width:320px;margin:0 auto;border-radius:10px;background:linear-gradient(115deg,var(--c1),var(--c2));overflow:hidden;color:#fff;border:0;padding:0;text-align:left;font:inherit;width:100%;box-shadow:0 3px 0 #0006}
+.fig:before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(115deg,#fff2 0 10px,#fff0 10px 22px)}
+button.fig{cursor:pointer}
+button.fig:hover:not(:disabled),button.fig:focus-visible{outline:3px solid var(--gold);transform:translateY(-2px)}
+button.fig:disabled{opacity:.3;cursor:not-allowed}
+.oval{position:absolute;left:8px;top:8px;height:74%;aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 40% 30%,#fff,#e9dfe9 70%);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.oval img{width:92%;height:92%;object-fit:contain}
+.oval b{font:2rem 'Russo One',sans-serif;color:#0003}
+.tag{position:absolute;left:0;bottom:8px;background:var(--ink);color:#fff;font:.82rem 'Russo One',sans-serif;padding:4px 14px 4px 10px;border-radius:0 12px 0 0;text-transform:uppercase;max-width:60%}
+.info{position:absolute;right:8px;top:28px;width:48%;font-size:.62rem;line-height:1.1;text-shadow:0 1px 0 #0006}
+.info div{margin-bottom:4px}.info span{display:block;font-weight:800;font-size:.74rem}
+.brand{position:absolute;right:8px;top:6px;font:italic .8rem 'Russo One',sans-serif;color:#fff;text-shadow:1px 1px 0 #1a4db0,-1px -1px 0 #1a4db0,1px -1px 0 #1a4db0,-1px 1px 0 #1a4db0}
+.fire{--c1:#ee4a2a;--c2:#c42a14}.water{--c1:#35a0e6;--c2:#1f74c4}.grass{--c1:#46b052;--c2:#2a8a3a}.poison{--c1:#9a4cc4;--c2:#6e2a98}.psy{--c1:#e8508f;--c2:#c42a72}.bug{--c1:#f08a2a;--c2:#d4620e}
+.cback{background:repeating-linear-gradient(135deg,#2b2160 0 12px,#35287a 12px 24px);border:3px solid var(--gold);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px}
+.cback:before{display:none}
+button.cback:disabled{opacity:.6}
+.ball{width:34px;height:34px;border-radius:50%;background:linear-gradient(#e33 0 46%,#111 46% 54%,#fff 54%);border:3px solid #111}
+.bt{font:italic .9rem 'Russo One',sans-serif;color:var(--gold)}
+.own{position:absolute;right:6px;bottom:6px;background:var(--gold);color:var(--ink);font:.7rem 'Russo One',sans-serif;padding:2px 8px;border-radius:6px}
+.flip{animation:fl .6s both}
+@keyframes fl{from{transform:rotateY(90deg);opacity:0}to{transform:none;opacity:1}}
+.bench{margin-top:6px;font-size:.88rem;opacity:.9}
+@media (prefers-reduced-motion:reduce){.flip{animation:none}}
+.box{background:#0004;border-radius:12px;padding:12px;margin-bottom:12px}
+.fld{display:flex;flex-direction:column;gap:4px;font-size:.9rem;margin-bottom:8px}
+.fld input{font:1rem system-ui,sans-serif;padding:8px 10px;border-radius:8px;border:2px solid var(--gold);background:#fff;color:var(--ink);width:190px;text-transform:none}
+b.code{font:1.6rem 'Russo One',sans-serif;color:var(--gold);letter-spacing:.15em}
+.names{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}.names label{display:flex;flex-direction:column;gap:4px;font-size:.9rem}.names input{font:1rem system-ui,sans-serif;padding:8px 10px;border-radius:8px;border:2px solid var(--gold);background:#fff;color:var(--ink);width:190px}
+.arena{display:flex;flex-direction:column;gap:10px}
+@media (min-width:720px){.arena{display:grid;grid-template-columns:1fr 1fr}#s0{order:1}#s1{order:2}.banner,.mid,.log,#again{grid-column:1/-1}.banner{order:3}.mid{order:4}.log{order:5}#again{order:6}}
+.side{background:#0004;border-radius:12px;padding:10px}
+.side.turn{outline:3px solid var(--gold)}
+.hpbar{height:14px;background:#000a;border-radius:7px;margin:8px 0 4px;overflow:hidden}
+.hpbar i{display:block;height:100%;background:linear-gradient(90deg,#e23,#fa3 60%,#4c5);transition:width .5s}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.coin{display:inline-block;width:20px;height:20px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff3a0,var(--gold) 55%,#b8860b);margin-left:3px;vertical-align:middle;box-shadow:0 1px 0 #0008}
+.coin.off{background:#0005;box-shadow:inset 0 0 0 2px #fff3}
+.mid{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;padding:6px}
+.die{width:70px;height:70px;border-radius:14px;background:var(--paper);color:var(--ink);font:2.4rem 'Russo One',sans-serif;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 0 #0007}
+.die.go{animation:t .4s}
+@keyframes t{0%{transform:rotate(-40deg) scale(.6)}100%{transform:none}}
+.hit .fig{animation:s .35s}
+@keyframes s{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+button.b{font:.95rem 'Russo One',sans-serif;border:0;border-radius:8px;padding:10px 14px;cursor:pointer;background:var(--gold);color:var(--ink);box-shadow:0 3px 0 #0007}
+button.b:disabled{opacity:.35;cursor:not-allowed}
+button.b.sp{background:#ff5a3c;color:#fff}
+button.b.sm{padding:6px 10px;font-size:.8rem;background:#fff3;color:#fff;box-shadow:none}
+button.b.sm.on{background:var(--gold);color:var(--ink)}
+button.b:focus-visible{outline:3px solid #fff}
+.banner{text-align:center;font:1.05rem 'Russo One',sans-serif;color:var(--gold)}
+.log{background:#0005;border-radius:8px;padding:8px 12px;min-height:4.4em;font-size:.92rem}
+.log div:first-child{font-weight:700}
+.rules{font-size:.85rem;opacity:.9;line-height:1.4}
+.hide{display:none}
+@media (prefers-reduced-motion:reduce){.die.go,.hit .fig{animation:none}}
+</style>
+</head>
+<body>
+<main>
+<h1>Duelo de Figuritas</h1>
+
+<section id="lobby">
+  <div class="box">
+    <h2>En este dispositivo</h2>
+    <p class="rules">Los dos jugadores comparten pantalla y se pasan el turno.</p>
+    <button class="b" id="localBtn">Jugar acá</button>
+  </div>
+  <div class="box">
+    <h2>Online: cada uno en su dispositivo</h2>
+    <label class="fld">Tu nombre<input id="myname" maxlength="14" placeholder="Tu nombre" autocomplete="off"></label>
+    <p><button class="b" id="hostBtn">Crear sala</button></p>
+    <label class="fld">Código de la sala<input id="code" maxlength="4" placeholder="K7QP" autocomplete="off"></label>
+    <p><button class="b" id="joinBtn">Unirme a la sala</button></p>
+    <p class="rules" id="netmsg" aria-live="polite"></p>
+  </div>
+</section>
+
+<section id="pick">
+  <div class="names" id="names"><label>Nombre del Jugador 1<input id="n0" maxlength="14" placeholder="Jugador 1" autocomplete="off"></label><label>Nombre del Jugador 2<input id="n1" maxlength="14" placeholder="Jugador 2" autocomplete="off"></label></div>
+  <h2 id="pt"></h2>
+  <p class="rules">Sobre la mesa hay figuritas boca abajo y nadie sabe cuáles son. Cada jugador toma 2 a ciegas. Después se dan vuelta todas juntas.<br>
+  <b>Cómo se juega:</b> una tirada de dado por turno. Si sacás un 6, ganás una pepita (máximo 4). Con ningún otro número se gana. Ataque básico: 2 pepitas. Ataque fuerte: 4 pepitas. En tu turno podés cambiar de monstruo: el que va al banco recupera entre 10 y 20 de vida. Perdés cuando tus dos monstruos quedan fuera de combate.</p>
+  <div class="grid" id="grid"></div>
+</section>
+
+<section id="reveal" class="hide">
+  <div id="rv"></div>
+  <p><button class="b" id="goBtn">¡A jugar!</button></p>
+</section>
+
+<section id="game" class="hide">
+  <div class="arena">
+    <div class="side" id="s0"></div>
+    <div class="banner" id="banner"></div>
+    <div class="mid">
+      <div class="die" id="die">?</div>
+      <button class="b" id="rollBtn">Tirar dado</button>
+      <button class="b" id="atkBtn"></button>
+      <button class="b sp" id="spBtn"></button>
+      <button class="b" id="swapBtn">Cambiar monstruo (el del banco recupera 10 a 20)</button>
+      <button class="b" id="keepBtn">Guardar pepitas y pasar</button>
+    </div>
+    <div class="side" id="s1"></div>
+    <div class="log" id="log" aria-live="polite"></div>
+    <button class="b hide" id="again">Nueva partida</button>
+  </div>
+</section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+// id|nombre|elemento|color|estado|rol|ataque básico|ataque fuerte
+// estado = el nivel que dice la figurita (1, 2, 3). L = legendario / sin evolución conocida.
+// rol: a = atacante, t = tanque, b = balanceado, k = muy resistente, l = legendario
+const D=`1|Bulbasaur|Césped/Veneno|g|1|b|Látigo cepa|Rayo solar
+2|Ivysaur|Césped/Veneno|g|2|b|Hoja afilada|Rayo solar
+3|Venusaur|Césped/Veneno|g|3|t|Hoja afilada|Rayo solar
+4|Charmander|Fuego|f|1|a|Ascuas|Lanzallamas
+5|Charmeleon|Fuego|f|2|a|Colmillo ígneo|Lanzallamas
+6|Charizard|Fuego/Volador|f|3|a|Garra dragón|Llamarada
+7|Squirtle|Agua|w|1|t|Burbuja|Hidrobomba
+8|Wartortle|Agua|w|2|t|Mordisco|Hidrobomba
+9|Blastoise|Agua|w|3|t|Cañón de agua|Hidrobomba
+13|Weedle|Bicho/Veneno|b|1|b|Picotazo|Doble ataque
+14|Kakuna|Bicho/Veneno|b|2|t|Fortaleza|Picadura
+15|Beedrill|Bicho/Veneno|b|3|a|Doble aguijón|Taladradora
+16|Pidgey|Normal/Volador|e|1|b|Tornado|Ataque ala
+17|Pidgeotto|Normal/Volador|e|2|b|Ataque ala|Ataque aéreo
+18|Pidgeot|Normal/Volador|e|3|a|Ataque ala|Pájaro osado
+172|Pichu|Eléctrico|e|1|b|Chispa|Impactrueno
+25|Pikachu|Eléctrico|e|2|a|Impactrueno|Rayo trueno
+26|Raichu|Eléctrico|e|3|a|Puño trueno|Trueno
+31|Nidoqueen|Veneno/Tierra|p|3|t|Doble patada|Terremoto
+34|Nidoking|Veneno/Tierra|p|3|a|Megacuerno|Terremoto
+37|Vulpix|Fuego|f|1|b|Ascuas|Giro fuego
+38|Ninetales|Fuego|f|2|b|Giro fuego|Llamarada
+58|Growlithe|Fuego|f|1|b|Mordisco|Lanzallamas
+59|Arcanine|Fuego|f|2|a|Colmillo ígneo|Envite ígneo
+63|Abra|Psíquico|y|1|b|Confusión|Psicorrayo
+64|Kadabra|Psíquico|y|2|b|Confusión|Psicorrayo
+65|Alakazam|Psíquico|y|3|a|Psicorrayo|Psíquico
+66|Machop|Lucha|y|1|a|Golpe kárate|Sumisión
+67|Machoke|Lucha|y|2|a|Golpe kárate|Sumisión
+68|Machamp|Lucha|y|3|a|Golpe cruzado|Sumisión
+74|Geodude|Roca/Tierra|e|1|t|Lanzarrocas|Terremoto
+75|Graveler|Roca/Tierra|e|2|t|Lanzarrocas|Terremoto
+76|Golem|Roca/Tierra|e|3|t|Rodada|Terremoto
+92|Gastly|Fantasma/Veneno|p|1|b|Lengüetazo|Bola sombra
+93|Haunter|Fantasma/Veneno|p|2|b|Puño sombra|Bola sombra
+94|Gengar|Fantasma/Veneno|p|3|a|Puño sombra|Bola sombra
+95|Onix|Roca/Tierra|e|1|k|Atadura|Excavar
+130|Gyarados|Agua/Volador|w|2|a|Mordisco|Hiperrayo
+131|Lapras|Agua/Hielo|w|1|k|Canto helado|Rayo hielo
+133|Eevee|Normal|e|1|b|Ataque rápido|Mordisco
+134|Vaporeon|Agua|w|2|t|Pistola agua|Hidrobomba
+135|Jolteon|Eléctrico|e|2|a|Doble patada|Trueno
+136|Flareon|Fuego|f|2|a|Colmillo ígneo|Llamarada
+143|Snorlax|Normal|e|1|k|Placaje|Golpe cuerpo
+147|Dratini|Dragón|w|1|b|Furia|Hiperrayo
+148|Dragonair|Dragón|w|2|b|Furia|Hiperrayo
+149|Dragonite|Dragón/Volador|b|3|a|Garra dragón|Hiperrayo
+152|Chikorita|Césped|g|1|t|Hoja afilada|Rayo solar
+153|Bayleef|Césped|g|2|t|Hoja afilada|Rayo solar
+154|Meganium|Césped|g|3|t|Látigo cepa|Rayo solar
+155|Cyndaquil|Fuego|f|1|a|Ascuas|Lanzallamas
+156|Quilava|Fuego|f|2|a|Rueda fuego|Lanzallamas
+157|Typhlosion|Fuego|f|3|a|Rueda fuego|Erupción
+158|Totodile|Agua|w|1|a|Arañazo|Hidrobomba
+159|Croconaw|Agua|w|2|a|Mordisco|Hidrobomba
+160|Feraligatr|Agua|w|3|a|Mordisco|Hidrobomba
+144|Articuno|Hielo/Volador|w|L|l|Viento hielo|Ventisca
+145|Zapdos|Eléctrico/Volador|e|L|l|Pico taladro|Trueno
+146|Moltres|Fuego/Volador|f|L|l|Ataque ala|Llamarada
+150|Mewtwo|Psíquico|y|L|l|Confusión|Psicoataque
+151|Mew|Psíquico|y|L|l|Confusión|Psíquico
+249|Lugia|Psíquico/Volador|y|L|l|Ataque aéreo|Aerochorro
+250|Ho-Oh|Fuego/Volador|f|L|l|Ataque sagrado|Fuego sagrado`;
+// base por estado: vida, daño básico (2 pepitas), daño fuerte (4 pepitas), dado mínimo para ganar pepita
+const B={1:{hp:55,b:13,s:28,th:6},2:{hp:75,b:18,s:40,th:6},3:{hp:100,b:26,s:58,th:6},L:{hp:90,b:24,s:72,th:6}};
+const R={a:[.88,1.15],t:[1.15,.88],b:[1,1],k:[1.5,.9],l:[1,1]};
+const C={g:'grass',f:'fire',w:'water',p:'poison',y:'psy',b:'bug',e:''};
+const M=D.split('\n').map(l=>{const [id,n,el,c,st,r,a1,a2]=l.split('|'),s=B[st],[h,d]=R[r];
+  return{id:+id,n,el,cl:C[c],st,a1,a2,hp:Math.round(s.hp*h/5)*5,b:Math.round(s.b*d),s:Math.round(s.s*d),th:s.th}});
+const $=id=>document.getElementById(id),rnd=()=>1+Math.floor(Math.random()*6),wait=ms=>new Promise(r=>setTimeout(r,ms));
+const IMG='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/';
+const fig=m=>`<div class="oval"><b>${m.id}</b><img alt="" src="${IMG}${m.id}.png" onload="this.previousElementSibling.remove()" onerror="this.remove()"></div>
+<div class="brand">¡Atrápalos ya!</div>
+<div class="info"><div>ELEMENTO<span>${m.el}</span></div><div>ESTADO<span>${m.st==='L'?'Legendario':m.st} · Vida ${m.hp}</span></div><div>ATAQUES<span>${m.b} · ${m.s}</span></div></div>
+<div class="tag">#${m.id} ${m.n}</div>`;
+const cls=m=>'fig '+m.cl;
+let P,G=null,phase='lobby',ME=null,NET={role:null,conn:null,peer:null},lastRoll=-1,lastHit=-1;
+const shuffle=a=>{a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+const esc=t=>String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const NAMES=['Jugador 1','Jugador 2'];
+const nm=k=>esc(NAMES[k]),took=k=>P.pool.filter(c=>c.o===k).length;
+const show=id=>['lobby','pick','reveal','game'].forEach(i=>$(i).classList.toggle('hide',i!==id));
+function sync(){if(NET.role==='host'&&NET.conn&&NET.conn.open)NET.conn.send(JSON.stringify({t:'s',phase,P,G,names:NAMES}))}
+
+/* ---- Reparto a ciegas ---- */
+function newPick(){
+  phase='pick';show('pick');
+  P={pool:shuffle(M.map((_,i)=>i)).slice(0,12).map(mi=>({mi,o:null}))};
+  renderPick();
+}
+function renderPick(){
+  $('names').classList.toggle('hide',!!NET.role);
+  const k=took(0)<2?0:1,mine=ME===null||k===ME;
+  $('pt').innerHTML=mine?`${nm(k)}: tomá 2 figuritas boca abajo (${took(k)}/2)`:`Esperando que ${nm(k)} elija sus figuritas…`;
+  $('grid').innerHTML=P.pool.map((c,i)=>`<button class="fig cback" data-i="${i}" ${c.o!==null||!mine?'disabled':''} aria-label="Figurita boca abajo ${i+1}"><div class="ball"></div><div class="bt">¡Atrápalos ya!</div>${c.o!==null?`<div class="own">${nm(c.o)}</div>`:''}</button>`).join('');
+  sync();
+}
+function reveal(){
+  phase='reveal';show('reveal');
+  $('rv').innerHTML=[0,1].map(k=>`<h2>${nm(k)}</h2><div class="grid">${P.pool.filter(c=>c.o===k).map((c,i)=>`<div class="${cls(M[c.mi])} flip" style="animation-delay:${(k*2+i)*.4}s">${fig(M[c.mi])}</div>`).join('')}</div>`).join('');
+  sync();
+}
+function startGame(){
+  const mk=k=>({mons:P.pool.filter(c=>c.o===k).map(c=>({m:M[c.mi],hp:M[c.mi].hp,max:M[c.mi].hp})),a:0,t:0});
+  G={pl:[mk(0),mk(1)],turn:0,rolled:false,busy:false,over:false,die:0,rollN:0,hitK:0,hitN:0,log:[`${nm(0)} empieza. Tirá el dado o cambiá de monstruo.`]};
+  phase='game';show('game');render();
+}
+
+/* ---- Partida ---- */
+const act=k=>G.pl[k].mons[G.pl[k].a],ben=k=>G.pl[k].mons[1-G.pl[k].a],cur=()=>act(G.turn);
+function sideHTML(k){
+  const p=G.pl[k],m=act(k),b=ben(k);
+  return `<div class="${cls(m.m)}">${fig(m.m)}</div>
+  <div class="hpbar"><i style="width:${m.hp/m.max*100}%"></i></div>
+  <div class="row"><strong>${nm(k)}: ${m.hp} / ${m.max}</strong><span>Pepitas: ${[0,1,2,3].map(i=>`<i class="coin${p.t>i?'':' off'}"></i>`).join('')}</span></div>
+  <div class="bench">En el banco: ${b.m.n} · ${b.hp>0?`${b.hp} / ${b.max}`:'fuera de combate'}</div>`;
+}
+function can(a,who){
+  if(!G||phase!=='game'||G.busy||G.over)return false;
+  if(who!==null&&G.turn!==who)return false;
+  const t=G.pl[G.turn].t;
+  return a==='roll'?!G.rolled:a==='atk'?G.rolled&&t>=2:a==='sp'?G.rolled&&t>=4:a==='swap'?ben(G.turn).hp>0:a==='keep'?G.rolled:false;
+}
+function render(){
+  $('s0').innerHTML=sideHTML(0);$('s1').innerHTML=sideHTML(1);
+  [0,1].forEach(k=>$('s'+k).classList.toggle('turn',G.turn===k&&!G.over));
+  const mo=cur(),mine=ME!==null&&G.turn===ME;
+  $('banner').innerHTML=G.over?'Fin de la partida':mine?`¡Es tu turno! (${mo.m.n}): pepita solo con un 6`:`Turno de ${nm(G.turn)} (${mo.m.n}): pepita solo con un 6`;
+  $('atkBtn').textContent=`${mo.m.a1} · ${mo.m.b} (2 pepitas)`;
+  $('spBtn').textContent=`${mo.m.a2} · ${mo.m.s} (4 pepitas)`;
+  ['roll','atk','sp','swap','keep'].forEach(a=>$(a+'Btn').disabled=!can(a,ME));
+  $('die').textContent=G.die||'?';
+  if(G.rollN!==lastRoll){lastRoll=G.rollN;if(G.rollN){const el=$('die');el.classList.remove('go');void el.offsetWidth;el.classList.add('go')}}
+  if(G.hitN!==lastHit){lastHit=G.hitN;if(G.hitN){const b=$('s'+G.hitK);b.classList.add('hit');setTimeout(()=>b.classList.remove('hit'),600)}}
+  $('again').classList.toggle('hide',!G.over);
+  $('log').innerHTML=G.log.slice(0,3).map(x=>`<div>${x}</div>`).join('');
+  sync();
+}
+const say=t=>G.log.unshift(t);
+async function roll(){
+  const d=rnd(),pl=G.pl[G.turn],mo=cur(),w=nm(G.turn);
+  G.die=d;G.rollN++;
+  if(d>=mo.m.th){
+    if(pl.t<4){pl.t++;say(`${w} sacó un ${d}: ¡gana una pepita!`)}
+    else say(`${w} sacó un ${d}, pero ya tiene el máximo de pepitas.`);
+  }else say(`${w} sacó un ${d}. Necesitaba un 6.`);
+  G.rolled=true;render();await wait(800);
+}
+async function hit(kind){
+  const a=cur(),pl=G.pl[G.turn],k=1-G.turn,d=act(k),sp=kind==='sp',dmg=sp?a.m.s:a.m.b;
+  pl.t-=sp?4:2;
+  say(`${nm(G.turn)}: ¡${sp?a.m.a2:a.m.a1}! ${dmg} de daño a ${d.m.n}.`);
+  d.hp=Math.max(0,d.hp-dmg);G.hitK=k;G.hitN++;render();await wait(600);
+  if(d.hp<=0){
+    const b=ben(k);say(`${d.m.n} quedó fuera de combate.`);
+    if(b.hp>0){G.pl[k].a=1-G.pl[k].a;say(`${nm(k)} saca a ${b.m.n}.`)}
+    else{G.over=true;say(`${nm(k)} se quedó sin monstruos. ¡Gana ${nm(G.turn)}!`)}
+  }
+  render();
+}
+function swap(){
+  const pl=G.pl[G.turn],old=cur(),before=old.hp;
+  old.hp=Math.min(old.max,old.hp+10+Math.floor(Math.random()*11));
+  pl.a=1-pl.a;
+  say(`${nm(G.turn)} cambia a ${cur().m.n}. ${old.m.n} descansa y recupera ${old.hp-before} de vida.`);
+}
+function endTurn(){
+  G.busy=false;
+  if(!G.over){G.turn=1-G.turn;G.rolled=false;say(`Turno de ${nm(G.turn)}. Tirá el dado.`)}
+  render();
+}
+const doRoll=async()=>{G.busy=true;render();await roll();
+  if(G.pl[G.turn].t<2&&ben(G.turn).hp<=0){await wait(400);endTurn()}else{G.busy=false;render()}};
+const doAtk=async()=>{G.busy=true;render();await hit('at');endTurn()};
+const doSp=async()=>{G.busy=true;render();await hit('sp');endTurn()};
+const doSwap=async()=>{G.busy=true;swap();render();await wait(700);endTurn()};
+const doKeep=()=>{say(`${nm(G.turn)} pasa el turno.`);endTurn()};
+
+/* ---- Acciones: las ejecuta siempre quien hace de árbitro (host o modo local) ---- */
+function perform(a,i,who){
+  if(a==='pick'){
+    if(phase!=='pick')return;
+    const k=took(0)<2?0:1,c=P.pool[i];
+    if((who!==null&&who!==k)||!c||c.o!==null)return;
+    c.o=k;
+    if(took(0)===2&&took(1)===2)reveal();else renderPick();
+    return;
+  }
+  if(a==='go'){if(phase==='reveal')startGame();return}
+  if(a==='again'){if(phase==='game'&&G.over)newPick();return}
+  if(!can(a,who))return;
+  ({roll:doRoll,atk:doAtk,sp:doSp,swap:doSwap,keep:doKeep})[a]();
+}
+function dispatch(a,i){
+  if(NET.role==='guest'){if(NET.conn&&NET.conn.open)NET.conn.send(JSON.stringify({t:'a',a,i}));return}
+  perform(a,i,NET.role==='host'?0:null);
+}
+$('grid').onclick=e=>{const b=e.target.closest('button');if(b&&!b.disabled)dispatch('pick',+b.dataset.i)};
+['roll','atk','sp','swap','keep'].forEach(a=>$(a+'Btn').onclick=()=>dispatch(a));
+$('goBtn').onclick=()=>dispatch('go');
+$('again').onclick=()=>dispatch('again');
+[0,1].forEach(k=>{$('n'+k).oninput=e=>{NAMES[k]=e.target.value.trim()||'Jugador '+(k+1);renderPick()}});
+
+/* ---- Online (PeerJS) ---- */
+const netMsg=t=>{$('netmsg').textContent=t};
+const needPeer=()=>typeof Peer!=='undefined'||(netMsg('No se pudo cargar PeerJS. Revisá tu conexión a internet.'),false);
+const cleanName=(v,d)=>String(v||'').trim().slice(0,14)||d;
+const makeCode=()=>Array.from({length:4},()=>'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random()*32)]).join('');
+function lost(){
+  if(NET.peer)try{NET.peer.destroy()}catch(e){}
+  const was=NET.role;NET={role:null,conn:null,peer:null};ME=null;
+  if(was){phase='lobby';show('lobby');netMsg('Se cortó la conexión con el otro jugador. Creen una sala nueva para seguir.')}
+}
+function applySnap(d){
+  P=d.P;G=d.G;NAMES[0]=d.names[0];NAMES[1]=d.names[1];phase=d.phase;
+  if(phase==='pick'){show('pick');renderPick()}
+  else if(phase==='reveal')reveal();
+  else if(G){show('game');render()}
+}
+function onHostMsg(raw){
+  let d;try{d=JSON.parse(raw)}catch(e){return}
+  if(d.t==='hello'){NAMES[1]=cleanName(d.name,'Jugador 2');newPick()}
+  else if(d.t==='a'&&typeof d.a==='string')perform(d.a,d.i,1);
+}
+function hostRoom(){
+  if(!needPeer())return;
+  if(NET.peer)try{NET.peer.destroy()}catch(e){}
+  NAMES[0]=cleanName($('myname').value,'Jugador 1');
+  const code=makeCode(),peer=new Peer('duelofig-'+code);
+  NET={role:'host',conn:null,peer};ME=0;
+  netMsg('Creando sala…');
+  peer.on('open',()=>{$('netmsg').innerHTML=`Sala creada. Pasale este código a tu rival: <b class="code">${code}</b><br>Esperando que se una… (no cierres esta pestaña)`});
+  peer.on('error',e=>{if(e.type==='unavailable-id'){hostRoom()}else netMsg('No se pudo crear la sala ('+e.type+'). Probá de nuevo.')});
+  peer.on('connection',c=>{
+    if(NET.conn&&NET.conn.open){c.close();return}
+    NET.conn=c;c.on('data',onHostMsg);c.on('close',lost);c.on('error',lost);
+  });
+}
+function joinRoom(){
+  if(!needPeer())return;
+  const code=$('code').value.trim().toUpperCase();
+  if(code.length!==4){netMsg('Escribí el código de 4 letras que te pasó tu rival.');return}
+  if(NET.peer)try{NET.peer.destroy()}catch(e){}
+  const name=cleanName($('myname').value,'Jugador 2'),peer=new Peer();
+  NET={role:'guest',conn:null,peer};ME=1;NAMES[1]=name;
+  netMsg('Conectando…');
+  peer.on('open',()=>{
+    const c=peer.connect('duelofig-'+code,{reliable:true});NET.conn=c;
+    c.on('open',()=>{c.send(JSON.stringify({t:'hello',name}));netMsg('Conectado. Esperando que arranque la partida…')});
+    c.on('data',raw=>{try{applySnap(JSON.parse(raw))}catch(e){}});
+    c.on('close',lost);c.on('error',lost);
+    setTimeout(()=>{if(NET.conn===c&&!c.open)netMsg('Tarda en conectar. Revisá el código o probá de nuevo.')},15000);
+  });
+  peer.on('error',e=>netMsg(e.type==='peer-unavailable'?'No encontré esa sala. Revisá el código.':'No se pudo conectar ('+e.type+').'));
+}
+$('hostBtn').onclick=hostRoom;
+$('joinBtn').onclick=joinRoom;
+$('localBtn').onclick=()=>{if(NET.peer)try{NET.peer.destroy()}catch(e){}NET={role:null,conn:null,peer:null};ME=null;newPick()};
+show('lobby');
+</script>
+</body>
+</html>
