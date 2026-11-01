@@ -39,6 +39,9 @@ button.cback:disabled{opacity:.6}
 .lead{outline:4px solid var(--gold)}
 #muteBtn{position:fixed;top:10px;right:10px;z-index:5}
 .peek{margin-top:6px}
+.pts{margin-top:6px;font-size:.88rem;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pbar{display:inline-block;width:90px;height:8px;background:#000a;border-radius:4px;overflow:hidden}
+.pbar i{display:block;height:100%;background:var(--gold)}
 .box{background:#0004;border-radius:12px;padding:12px;margin-bottom:12px}
 .fld{display:flex;flex-direction:column;gap:4px;font-size:.9rem;margin-bottom:8px}
 .fld input{font:1rem system-ui,sans-serif;padding:8px 10px;border-radius:8px;border:2px solid var(--gold);background:#fff;color:var(--ink);width:190px;text-transform:none}
@@ -98,7 +101,7 @@ button.b:focus-visible{outline:3px solid #fff}
   <div class="names" id="names"><label>Nombre del Jugador 1<input id="n0" maxlength="14" placeholder="Jugador 1" autocomplete="off"></label><label>Nombre del Jugador 2<input id="n1" maxlength="14" placeholder="Jugador 2" autocomplete="off"></label></div>
   <h2 id="pt"></h2>
   <p class="rules">Sobre la mesa hay figuritas boca abajo y nadie sabe cuáles son. Cada jugador toma 2 a ciegas. Después cada uno ve solo sus propias figuritas y elige con cuál arrancar. La otra queda oculta para el rival hasta que entre al combate.<br>
-  <b>Cómo se juega:</b> una tirada de dado por turno. Si sacás un 6, ganás una pepita (máximo 4). Con ningún otro número se gana. Ataque básico: 2 pepitas. Ataque fuerte: 4 pepitas. En tu turno podés cambiar de monstruo: el que va al banco recupera entre 10 y 20 de vida. Perdés cuando tus dos monstruos quedan fuera de combate.</p>
+  <b>Cómo se juega:</b> en tu turno tirás el dado y sumás ese número a tus puntos. Cada 6 puntos podés canjearlos por una piedra de energía, y lo que sobra se guarda para el próximo turno (si sacás un 5 y después un 4, canjeás 6 y te quedan 3). Si sacás un 6 directo, tirás de nuevo, hasta 2 veces extra en el mismo turno. Ataque básico: 2 piedras. Ataque fuerte: 4 piedras. Máximo 4 piedras. Cada ataque quita exactamente los HP que dice su figurita. En tu turno también podés cambiar de monstruo: el que va al banco recupera entre 10 y 20 HP. Perdés cuando tus dos monstruos quedan fuera de combate.</p>
   <div class="grid" id="grid"></div>
 </section>
 
@@ -113,10 +116,11 @@ button.b:focus-visible{outline:3px solid #fff}
     <div class="mid">
       <div class="die" id="die">?</div>
       <button class="b" id="rollBtn">Tirar dado</button>
+      <button class="b" id="stoneBtn">Canjear 6 puntos por 1 piedra de energía</button>
       <button class="b" id="atkBtn"></button>
       <button class="b sp" id="spBtn"></button>
-      <button class="b" id="swapBtn">Cambiar monstruo (el del banco recupera 10 a 20)</button>
-      <button class="b" id="keepBtn">Guardar pepitas y pasar</button>
+      <button class="b" id="swapBtn">Cambiar monstruo (el que sale recupera 10 a 20 HP)</button>
+      <button class="b" id="keepBtn">Terminar turno</button>
     </div>
     <div class="side" id="s1"></div>
     <div class="log" id="log" aria-live="polite"></div>
@@ -192,7 +196,7 @@ const D=`1|Bulbasaur|Césped/Veneno|g|1|b|Látigo cepa|Rayo solar
 151|Mew|Psíquico|y|L|l|Confusión|Psíquico
 249|Lugia|Psíquico/Volador|y|L|l|Ataque aéreo|Aerochorro
 250|Ho-Oh|Fuego/Volador|f|L|l|Ataque sagrado|Fuego sagrado`;
-// base por estado: vida, daño básico (2 pepitas), daño fuerte (4 pepitas), dado mínimo para ganar pepita
+// base por estado: HP, daño básico (2 piedras), daño fuerte (4 piedras)
 const B={1:{hp:55,b:13,s:28,th:6},2:{hp:75,b:18,s:40,th:6},3:{hp:100,b:26,s:58,th:6},L:{hp:90,b:24,s:72,th:6}};
 const R={a:[.88,1.15],t:[1.15,.88],b:[1,1],k:[1.5,.9],l:[1,1]};
 const C={g:'grass',f:'fire',w:'water',p:'poison',y:'psy',b:'bug',e:''};
@@ -202,7 +206,7 @@ const $=id=>document.getElementById(id),rnd=()=>1+Math.floor(Math.random()*6),wa
 const IMG='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/';
 const fig=m=>`<div class="oval"><b>${m.id}</b><img alt="" src="${IMG}${m.id}.png" onload="this.previousElementSibling.remove()" onerror="this.remove()"></div>
 <div class="brand">¡Atrápalos ya!</div>
-<div class="info"><div>ELEMENTO<span>${m.el}</span></div><div>ESTADO<span>${m.st==='L'?'Legendario':m.st} · Vida ${m.hp}</span></div><div>ATAQUES<span>${m.b} · ${m.s}</span></div></div>
+<div class="info"><div>ELEMENTO<span>${m.el}</span></div><div>ESTADO · HP<span>${m.st==='L'?'Legendario':m.st} · ${m.hp} HP</span></div><div>ATAQUE (2 piedras)<span>${m.a1} · ${m.b}</span></div><div>ATAQUE FUERTE (4 piedras)<span>${m.a2} · ${m.s}</span></div></div>
 <div class="tag">#${m.id} ${m.n}</div>`;
 const cls=m=>'fig '+m.cl;
 let P,G=null,phase='lobby',ME=null,NET={role:null,conn:null,peer:null},lastRoll=-1,lastHit=-1,lastEv=0,rvPeek=false,rvFresh=false,peekK=null;
@@ -233,6 +237,8 @@ const SFX={
  ko(){tone(420,0,.7,'sawtooth',.16,50);noise(.1,.4,.25,400,'lowpass')},
  swap(){noise(0,.35,.25,500,'lowpass');tone(280,0,.3,'sine',.1,900)},
  win(){[523,659,784,1047].forEach((f,i)=>tone(f,.5+i*.16,.35,'square',.12));tone(1047,1.2,.6,'triangle',.15)},
+ pts(){tone(520,.55,.1,'triangle',.1)},
+ stone(){tone(988,0,.08,'square',.1);tone(1319,.08,.25,'square',.1)},
  pick(){tone(720,0,.06,'square',.07)},
  flip(){noise(0,.14,.18,3200)}
 };
@@ -266,8 +272,8 @@ function reveal(){
   $('rv').innerHTML=h;sync();
 }
 function startGame(){
-  const mk=k=>{const cs=P.pool.filter(c=>c.o===k).map(c=>({m:M[c.mi],hp:M[c.mi].hp,max:M[c.mi].hp,shown:false}));if(P.lead[k]===1)cs.reverse();cs[0].shown=true;return{mons:cs,a:0,t:0}};
-  G={pl:[mk(0),mk(1)],turn:0,rolled:false,busy:false,over:false,die:0,rollN:0,hitK:0,hitN:0,evN:0,fx:[],log:[`${nm(0)} empieza. Tirá el dado o cambiá de monstruo.`]};
+  const mk=k=>{const cs=P.pool.filter(c=>c.o===k).map(c=>({m:M[c.mi],hp:M[c.mi].hp,max:M[c.mi].hp,shown:false}));if(P.lead[k]===1)cs.reverse();cs[0].shown=true;return{mons:cs,a:0,t:0,pts:0}};
+  G={pl:[mk(0),mk(1)],turn:0,rolled:false,bonus:false,extra:0,busy:false,over:false,die:0,rollN:0,hitK:0,hitN:0,evN:0,fx:[],log:[`${nm(0)} empieza. Tirá el dado o cambiá de monstruo.`]};
   lastEv=0;phase='game';show('game');render();
 }
 
@@ -275,27 +281,29 @@ function startGame(){
 const act=k=>G.pl[k].mons[G.pl[k].a],ben=k=>G.pl[k].mons[1-G.pl[k].a],cur=()=>act(G.turn);
 function sideHTML(k){
   const p=G.pl[k],m=act(k),b=ben(k),own=ME===k||(ME===null&&peekK===k),vis=!b.hidden&&(b.shown||own);
-  const bench=!vis?'En el banco: una figurita oculta':`En el banco: ${b.m.n} · ${b.hp}/${b.max}${b.hp<=0?' (fuera de combate)':''} · ${b.m.a1} ${b.m.b} / ${b.m.a2} ${b.m.s}${!b.shown?' (oculta para tu rival)':''}`;
+  const bench=!vis?'En el banco: una figurita oculta':`En el banco: ${b.m.n} · ${b.hp}/${b.max} HP${b.hp<=0?' (fuera de combate)':''} · ${b.m.a1} ${b.m.b} / ${b.m.a2} ${b.m.s}${!b.shown?' (oculta para tu rival)':''}`;
   const pk=ME===null&&!b.hidden&&!b.shown&&b.hp>0?` <button class="b sm peek" data-k="${k}">Ver mi banco (3 s)</button>`:'';
   return `<div class="${cls(m.m)}">${fig(m.m)}</div>
   <div class="hpbar"><i style="width:${m.hp/m.max*100}%"></i></div>
-  <div class="row"><strong>${nm(k)}: ${m.hp} / ${m.max}</strong><span>Pepitas: ${[0,1,2,3].map(i=>`<i class="coin${p.t>i?'':' off'}"></i>`).join('')}</span></div>
+  <div class="row"><strong>${nm(k)}: ${m.hp} / ${m.max} HP</strong><span>Piedras de energía: ${[0,1,2,3].map(i=>`<i class="coin${p.t>i?'':' off'}"></i>`).join('')}</span></div>
+  <div class="pts">Puntos: <b>${p.pts}</b> <span class="pbar"><i style="width:${Math.min(100,p.pts/6*100)}%"></i></span> <small>6 puntos = 1 piedra</small></div>
   <div class="bench">${bench}${pk}</div>`;
 }
 function can(a,who){
   if(!G||phase!=='game'||G.busy||G.over)return false;
   if(who!==null&&G.turn!==who)return false;
-  const t=G.pl[G.turn].t;
-  return a==='roll'?!G.rolled:a==='atk'?G.rolled&&t>=2:a==='sp'?G.rolled&&t>=4:a==='swap'?ben(G.turn).hp>0:a==='keep'?G.rolled:false;
+  const pl=G.pl[G.turn],t=pl.t;
+  return a==='roll'?(!G.rolled||G.bonus):a==='stone'?(pl.pts>=6&&t<4):a==='atk'?G.rolled&&t>=2:a==='sp'?G.rolled&&t>=4:a==='swap'?ben(G.turn).hp>0:a==='keep'?G.rolled:false;
 }
 function render(){
   $('s0').innerHTML=sideHTML(0);$('s1').innerHTML=sideHTML(1);
   [0,1].forEach(k=>$('s'+k).classList.toggle('turn',G.turn===k&&!G.over));
   const mo=cur(),mine=ME!==null&&G.turn===ME;
-  $('banner').innerHTML=G.over?'Fin de la partida':mine?`¡Es tu turno! (${mo.m.n}): pepita solo con un 6`:`Turno de ${nm(G.turn)} (${mo.m.n}): pepita solo con un 6`;
-  $('atkBtn').textContent=`${mo.m.a1} · ${mo.m.b} (2 pepitas)`;
-  $('spBtn').textContent=`${mo.m.a2} · ${mo.m.s} (4 pepitas)`;
-  ['roll','atk','sp','swap','keep'].forEach(a=>$(a+'Btn').disabled=!can(a,ME));
+  $('banner').innerHTML=G.over?'Fin de la partida':mine?`¡Es tu turno! (${mo.m.n})`:`Turno de ${nm(G.turn)} (${mo.m.n})`;
+  $('atkBtn').textContent=`${mo.m.a1} · ${mo.m.b} HP (2 piedras)`;
+  $('spBtn').textContent=`${mo.m.a2} · ${mo.m.s} HP (4 piedras)`;
+  $('rollBtn').textContent=G.rolled&&G.bonus?'¡Tirar de nuevo!':'Tirar dado';
+  ['roll','stone','atk','sp','swap','keep'].forEach(a=>$(a+'Btn').disabled=!can(a,ME));
   $('die').textContent=G.die||'?';
   if(G.rollN!==lastRoll){lastRoll=G.rollN;if(G.rollN){const el=$('die');el.classList.remove('go');void el.offsetWidth;el.classList.add('go')}}
   if(G.hitN!==lastHit){lastHit=G.hitN;if(G.hitN){const b=$('s'+G.hitK);b.classList.add('hit');setTimeout(()=>b.classList.remove('hit'),600)}}
@@ -309,17 +317,20 @@ const say=t=>G.log.unshift(t);
 function ev(t){G.evN=(G.evN||0)+1;G.fx=(G.fx||[]).slice(-7);G.fx.push({i:G.evN,t})}
 async function roll(){
   const d=rnd(),pl=G.pl[G.turn],mo=cur(),w=nm(G.turn);
-  G.die=d;G.rollN++;ev('roll');ev(d>=mo.m.th?'six':'miss');
-  if(d>=mo.m.th){
-    if(pl.t<4){pl.t++;say(`${w} sacó un ${d}: ¡gana una pepita!`)}
-    else say(`${w} sacó un ${d}, pero ya tiene el máximo de pepitas.`);
-  }else say(`${w} sacó un ${d}. Necesitaba un 6.`);
+  G.die=d;G.rollN++;ev('roll');pl.pts+=d;
+  let msg=`${w} sacó un ${d}: suma ${d} (tiene ${pl.pts} puntos).`;
+  if(d===6){ev('six');
+    if(G.extra<2){G.bonus=true;G.extra++;msg+=` ¡Un 6! Tirá de nuevo (tiradas extra: ${G.extra}/2).`}
+    else{G.bonus=false;msg+=' ¡Un 6! Pero ya usaste las 2 tiradas extra.'}
+  }else{ev('pts');G.bonus=false}
+  if(pl.pts>=6&&pl.t<4)msg+=' Ya podés canjear una piedra.';
+  say(msg);
   G.rolled=true;render();await wait(800);
 }
 async function hit(kind){
   const a=cur(),pl=G.pl[G.turn],k=1-G.turn,d=act(k),sp=kind==='sp',dmg=sp?a.m.s:a.m.b;
   pl.t-=sp?4:2;
-  say(`${nm(G.turn)}: ¡${sp?a.m.a2:a.m.a1}! ${dmg} de daño a ${d.m.n}.`);
+  say(`${nm(G.turn)}: ¡${sp?a.m.a2:a.m.a1}! Quita ${dmg} HP a ${d.m.n}.`);
   d.hp=Math.max(0,d.hp-dmg);G.hitK=k;G.hitN++;ev(sp?'sp':'atk');render();await wait(600);
   if(d.hp<=0){
     const b=ben(k);say(`${d.m.n} quedó fuera de combate.`);ev('ko');
@@ -332,15 +343,17 @@ function swap(){
   const pl=G.pl[G.turn],old=cur(),before=old.hp;
   old.hp=Math.min(old.max,old.hp+10+Math.floor(Math.random()*11));
   pl.a=1-pl.a;cur().shown=true;ev('swap');
-  say(`${nm(G.turn)} cambia a ${cur().m.n}. ${old.m.n} descansa y recupera ${old.hp-before} de vida.`);
+  say(`${nm(G.turn)} cambia a ${cur().m.n}. ${old.m.n} descansa y recupera ${old.hp-before} HP.`);
 }
 function endTurn(){
   G.busy=false;
-  if(!G.over){G.turn=1-G.turn;G.rolled=false;say(`Turno de ${nm(G.turn)}. Tirá el dado.`)}
+  if(!G.over){G.turn=1-G.turn;G.rolled=false;G.bonus=false;G.extra=0;say(`Turno de ${nm(G.turn)}. Tirá el dado.`)}
   render();
 }
+function noActions(){const pl=G.pl[G.turn];return !G.bonus&&!(pl.pts>=6&&pl.t<4)&&pl.t<2&&ben(G.turn).hp<=0}
 const doRoll=async()=>{G.busy=true;render();await roll();
-  if(G.pl[G.turn].t<2&&ben(G.turn).hp<=0){await wait(400);endTurn()}else{G.busy=false;render()}};
+  if(noActions()){await wait(400);endTurn()}else{G.busy=false;render()}};
+const doStone=()=>{const pl=G.pl[G.turn];pl.pts-=6;pl.t++;ev('stone');say(`${nm(G.turn)} canjea 6 puntos por una piedra de energía (le sobran ${pl.pts} puntos).`);render()};
 const doAtk=async()=>{G.busy=true;render();await hit('at');endTurn()};
 const doSp=async()=>{G.busy=true;render();await hit('sp');endTurn()};
 const doSwap=async()=>{G.busy=true;swap();render();await wait(700);endTurn()};
@@ -367,14 +380,14 @@ function perform(a,i,who){
   }
   if(a==='again'){if(phase==='game'&&G.over)newPick();return}
   if(!can(a,who))return;
-  ({roll:doRoll,atk:doAtk,sp:doSp,swap:doSwap,keep:doKeep})[a]();
+  ({roll:doRoll,stone:doStone,atk:doAtk,sp:doSp,swap:doSwap,keep:doKeep})[a]();
 }
 function dispatch(a,i){
   if(NET.role==='guest'){if(NET.conn&&NET.conn.open)NET.conn.send(JSON.stringify({t:'a',a,i}));return}
   perform(a,i,NET.role==='host'?0:null);
 }
 $('grid').onclick=e=>{const b=e.target.closest('button');if(b&&!b.disabled){play('pick');dispatch('pick',+b.dataset.i)}};
-['roll','atk','sp','swap','keep'].forEach(a=>$(a+'Btn').onclick=()=>dispatch(a));
+['roll','stone','atk','sp','swap','keep'].forEach(a=>$(a+'Btn').onclick=()=>dispatch(a));
 $('rv').onclick=e=>{
   if(e.target.closest('#peekBtn')){rvPeek=true;rvFresh=true;reveal();return}
   const l=e.target.closest('[data-lead]');if(l){play('pick');dispatch('lead',+l.dataset.lead);return}
