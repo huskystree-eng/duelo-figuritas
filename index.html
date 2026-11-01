@@ -42,6 +42,19 @@ button.cback:disabled{opacity:.6}
 .pts{margin-top:6px;font-size:.88rem;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .pbar{display:inline-block;width:90px;height:8px;background:#000a;border-radius:4px;overflow:hidden}
 .pbar i{display:block;height:100%;background:var(--gold)}
+#chatTog{position:fixed;bottom:10px;right:10px;z-index:6}
+.badge{background:#e23;color:#fff;border-radius:10px;padding:0 6px;margin-left:4px}
+.badge.hide,#chatTog.hide{display:none}
+.chat{position:fixed;bottom:52px;right:10px;width:min(340px,calc(100vw - 20px));height:min(330px,55vh);background:#1b1230f2;border:2px solid var(--gold);border-radius:12px;z-index:6;display:flex;flex-direction:column;padding:8px;gap:6px}
+.chat.hide{display:none}
+.chatlog{flex:1;overflow-y:auto;font-size:.9rem;display:flex;flex-direction:column;gap:4px}
+.msg{padding:5px 9px;border-radius:10px;background:#fff2;max-width:85%;overflow-wrap:anywhere;align-self:flex-start}
+.msg.me{background:var(--gold);color:var(--ink);align-self:flex-end}
+.msg b{display:block;font-size:.72rem;opacity:.75}
+.quick{display:flex;gap:6px}
+.quick button{background:#fff2;border:0;border-radius:8px;font-size:1.1rem;cursor:pointer;padding:2px 9px}
+.chatin{display:flex;gap:6px}
+.chatin input{flex:1;min-width:0;font:.95rem system-ui,sans-serif;padding:7px 9px;border-radius:8px;border:2px solid var(--gold)}
 .box{background:#0004;border-radius:12px;padding:12px;margin-bottom:12px}
 .fld{display:flex;flex-direction:column;gap:4px;font-size:.9rem;margin-bottom:8px}
 .fld input{font:1rem system-ui,sans-serif;padding:8px 10px;border-radius:8px;border:2px solid var(--gold);background:#fff;color:var(--ink);width:190px;text-transform:none}
@@ -127,6 +140,12 @@ button.b:focus-visible{outline:3px solid #fff}
     <button class="b hide" id="again">Nueva partida</button>
   </div>
 </section>
+<button class="b sm hide" id="chatTog" aria-expanded="false">💬 Chat<span class="badge hide" id="chatBadge">0</span></button>
+<div class="chat hide" id="chatBox" aria-label="Chat con tu rival">
+  <div class="chatlog" id="chatLog" role="log" aria-live="polite"></div>
+  <div class="quick"><button data-q="👍" aria-label="Enviar pulgar arriba">👍</button><button data-q="😂" aria-label="Enviar risa">😂</button><button data-q="😮" aria-label="Enviar sorpresa">😮</button><button data-q="¡Buena jugada!">👏</button><button data-q="¡Revancha!">🔥</button></div>
+  <div class="chatin"><input id="chatIn" maxlength="200" placeholder="Escribí un mensaje…" aria-label="Mensaje" autocomplete="off"><button class="b sm" id="chatSend">Enviar</button></div>
+</div>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
@@ -214,7 +233,7 @@ const shuffle=a=>{a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math
 const esc=t=>String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const NAMES=['Jugador 1','Jugador 2'];
 const nm=k=>esc(NAMES[k]),took=k=>P.pool.filter(c=>c.o===k).length;
-const show=id=>['lobby','pick','reveal','game'].forEach(i=>$(i).classList.toggle('hide',i!==id));
+function show(id){['lobby','pick','reveal','game'].forEach(i=>$(i).classList.toggle('hide',i!==id));chatVis()}
 // Lo que le llega al invitado: sin los datos de las figuritas que todavía no puede ver
 function viewFor(w){
   return{phase,names:NAMES,
@@ -237,6 +256,7 @@ const SFX={
  ko(){tone(420,0,.7,'sawtooth',.16,50);noise(.1,.4,.25,400,'lowpass')},
  swap(){noise(0,.35,.25,500,'lowpass');tone(280,0,.3,'sine',.1,900)},
  win(){[523,659,784,1047].forEach((f,i)=>tone(f,.5+i*.16,.35,'square',.12));tone(1047,1.2,.6,'triangle',.15)},
+ msg(){tone(880,0,.07,'sine',.08);tone(1175,.07,.1,'sine',.08)},
  pts(){tone(520,.55,.1,'triangle',.1)},
  stone(){tone(988,0,.08,'square',.1);tone(1319,.08,.25,'square',.1)},
  pick(){tone(720,0,.06,'square',.07)},
@@ -397,6 +417,39 @@ $('s0').onclick=$('s1').onclick=e=>{const b=e.target.closest('.peek');if(!b)retu
 $('again').onclick=()=>dispatch('again');
 [0,1].forEach(k=>{$('n'+k).oninput=e=>{NAMES[k]=e.target.value.trim()||'Jugador '+(k+1);renderPick()}});
 
+/* ---- Chat (solo online) ---- */
+let CHAT=[],chatOpen=false,unread=0,lastChat=0;
+function chatVis(){
+  const on=!!NET.role&&phase!=='lobby';
+  $('chatTog').classList.toggle('hide',!on);
+  $('chatBox').classList.toggle('hide',!(on&&chatOpen));
+  $('chatBadge').classList.toggle('hide',!unread);$('chatBadge').textContent=unread;
+  $('chatTog').setAttribute('aria-expanded',String(on&&chatOpen));
+}
+function renderChat(){
+  const l=$('chatLog');
+  l.innerHTML=CHAT.map(m=>`<div class="msg${m.me?' me':''}"><b>${esc(m.name)}</b>${esc(m.text)}</div>`).join('')||'<div class="msg">Todavía no hay mensajes. ¡Saludá a tu rival!</div>';
+  l.scrollTop=l.scrollHeight;
+}
+function addChat(me,name,text){
+  CHAT.push({me,name,text});CHAT=CHAT.slice(-60);
+  if(!me){if(!chatOpen)unread++;play('msg')}
+  renderChat();chatVis();
+}
+function sendChat(text){
+  text=String(text||'').trim().slice(0,200);
+  if(!text||!NET.conn||!NET.conn.open||Date.now()-lastChat<400)return false;
+  lastChat=Date.now();
+  NET.conn.send(JSON.stringify({t:'chat',text}));
+  addChat(true,NAMES[ME],text);return true;
+}
+function resetChat(){CHAT=[];unread=0;renderChat();chatVis()}
+function onGuestMsg(raw){
+  let d;try{d=JSON.parse(raw)}catch(e){return}
+  if(d.t==='chat')addChat(false,NAMES[0],String(d.text||'').slice(0,200));
+  else if(d.t==='s'){try{applySnap(d)}catch(e){}}
+}
+
 /* ---- Online (PeerJS) ---- */
 const netMsg=t=>{$('netmsg').textContent=t};
 const needPeer=()=>typeof Peer!=='undefined'||(netMsg('No se pudo cargar PeerJS. Revisá tu conexión a internet.'),false);
@@ -416,6 +469,7 @@ function applySnap(d){
 function onHostMsg(raw){
   let d;try{d=JSON.parse(raw)}catch(e){return}
   if(d.t==='hello'){NAMES[1]=cleanName(d.name,'Jugador 2');newPick()}
+  else if(d.t==='chat')addChat(false,NAMES[1],String(d.text||'').slice(0,200));
   else if(d.t==='a'&&typeof d.a==='string')perform(d.a,d.i,1);
 }
 function hostRoom(){
@@ -423,7 +477,7 @@ function hostRoom(){
   if(NET.peer)try{NET.peer.destroy()}catch(e){}
   NAMES[0]=cleanName($('myname').value,'Jugador 1');
   const code=makeCode(),peer=new Peer('duelofig-'+code);
-  NET={role:'host',conn:null,peer};ME=0;
+  NET={role:'host',conn:null,peer};ME=0;resetChat();
   netMsg('Creando sala…');
   peer.on('open',()=>{$('netmsg').innerHTML=`Sala creada. Pasale este código a tu rival: <b class="code">${code}</b><br>Esperando que se una… (no cierres esta pestaña)`});
   peer.on('error',e=>{if(e.type==='unavailable-id'){hostRoom()}else netMsg('No se pudo crear la sala ('+e.type+'). Probá de nuevo.')});
@@ -438,12 +492,12 @@ function joinRoom(){
   if(code.length!==4){netMsg('Escribí el código de 4 letras que te pasó tu rival.');return}
   if(NET.peer)try{NET.peer.destroy()}catch(e){}
   const name=cleanName($('myname').value,'Jugador 2'),peer=new Peer();
-  NET={role:'guest',conn:null,peer};ME=1;NAMES[1]=name;
+  NET={role:'guest',conn:null,peer};ME=1;NAMES[1]=name;resetChat();
   netMsg('Conectando…');
   peer.on('open',()=>{
     const c=peer.connect('duelofig-'+code,{reliable:true});NET.conn=c;
     c.on('open',()=>{c.send(JSON.stringify({t:'hello',name}));netMsg('Conectado. Esperando que arranque la partida…')});
-    c.on('data',raw=>{try{applySnap(JSON.parse(raw))}catch(e){}});
+    c.on('data',onGuestMsg);
     c.on('close',lost);c.on('error',lost);
     setTimeout(()=>{if(NET.conn===c&&!c.open)netMsg('Tarda en conectar. Revisá el código o probá de nuevo.')},15000);
   });
@@ -452,6 +506,11 @@ function joinRoom(){
 $('hostBtn').onclick=hostRoom;
 $('joinBtn').onclick=joinRoom;
 $('localBtn').onclick=()=>{if(NET.peer)try{NET.peer.destroy()}catch(e){}NET={role:null,conn:null,peer:null};ME=null;newPick()};
+$('chatTog').onclick=()=>{chatOpen=!chatOpen;if(chatOpen)unread=0;renderChat();chatVis()};
+$('chatSend').onclick=()=>{if(sendChat($('chatIn').value))$('chatIn').value=''};
+$('chatIn').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('chatSend').click()}};
+$('chatBox').onclick=e=>{const q=e.target.closest('[data-q]');if(q)sendChat(q.dataset.q)};
+renderChat();
 const updMute=()=>{$('muteBtn').textContent=MUTE?'🔇':'🔊';$('muteBtn').setAttribute('aria-label',MUTE?'Activar sonidos':'Silenciar sonidos')};
 $('muteBtn').onclick=()=>{MUTE=!MUTE;try{localStorage.setItem('mute',MUTE?'1':'0')}catch(e){}updMute();if(!MUTE)play('pick')};
 updMute();
