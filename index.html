@@ -36,6 +36,9 @@ button.cback:disabled{opacity:.6}
 @keyframes fl{from{transform:rotateY(90deg);opacity:0}to{transform:none;opacity:1}}
 .bench{margin-top:6px;font-size:.88rem;opacity:.9}
 @media (prefers-reduced-motion:reduce){.flip{animation:none}}
+.lead{outline:4px solid var(--gold)}
+#muteBtn{position:fixed;top:10px;right:10px;z-index:5}
+.peek{margin-top:6px}
 .box{background:#0004;border-radius:12px;padding:12px;margin-bottom:12px}
 .fld{display:flex;flex-direction:column;gap:4px;font-size:.9rem;margin-bottom:8px}
 .fld input{font:1rem system-ui,sans-serif;padding:8px 10px;border-radius:8px;border:2px solid var(--gold);background:#fff;color:var(--ink);width:190px;text-transform:none}
@@ -72,6 +75,7 @@ button.b:focus-visible{outline:3px solid #fff}
 </head>
 <body>
 <main>
+<button class="b sm" id="muteBtn" aria-label="Silenciar sonidos">🔊</button>
 <h1>Duelo de Figuritas</h1>
 
 <section id="lobby">
@@ -93,14 +97,13 @@ button.b:focus-visible{outline:3px solid #fff}
 <section id="pick">
   <div class="names" id="names"><label>Nombre del Jugador 1<input id="n0" maxlength="14" placeholder="Jugador 1" autocomplete="off"></label><label>Nombre del Jugador 2<input id="n1" maxlength="14" placeholder="Jugador 2" autocomplete="off"></label></div>
   <h2 id="pt"></h2>
-  <p class="rules">Sobre la mesa hay figuritas boca abajo y nadie sabe cuáles son. Cada jugador toma 2 a ciegas. Después se dan vuelta todas juntas.<br>
+  <p class="rules">Sobre la mesa hay figuritas boca abajo y nadie sabe cuáles son. Cada jugador toma 2 a ciegas. Después cada uno ve solo sus propias figuritas y elige con cuál arrancar. La otra queda oculta para el rival hasta que entre al combate.<br>
   <b>Cómo se juega:</b> una tirada de dado por turno. Si sacás un 6, ganás una pepita (máximo 4). Con ningún otro número se gana. Ataque básico: 2 pepitas. Ataque fuerte: 4 pepitas. En tu turno podés cambiar de monstruo: el que va al banco recupera entre 10 y 20 de vida. Perdés cuando tus dos monstruos quedan fuera de combate.</p>
   <div class="grid" id="grid"></div>
 </section>
 
 <section id="reveal" class="hide">
   <div id="rv"></div>
-  <p><button class="b" id="goBtn">¡A jugar!</button></p>
 </section>
 
 <section id="game" class="hide">
@@ -202,18 +205,43 @@ const fig=m=>`<div class="oval"><b>${m.id}</b><img alt="" src="${IMG}${m.id}.png
 <div class="info"><div>ELEMENTO<span>${m.el}</span></div><div>ESTADO<span>${m.st==='L'?'Legendario':m.st} · Vida ${m.hp}</span></div><div>ATAQUES<span>${m.b} · ${m.s}</span></div></div>
 <div class="tag">#${m.id} ${m.n}</div>`;
 const cls=m=>'fig '+m.cl;
-let P,G=null,phase='lobby',ME=null,NET={role:null,conn:null,peer:null},lastRoll=-1,lastHit=-1;
+let P,G=null,phase='lobby',ME=null,NET={role:null,conn:null,peer:null},lastRoll=-1,lastHit=-1,lastEv=0,rvPeek=false,rvFresh=false,peekK=null;
 const shuffle=a=>{a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
 const esc=t=>String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const NAMES=['Jugador 1','Jugador 2'];
 const nm=k=>esc(NAMES[k]),took=k=>P.pool.filter(c=>c.o===k).length;
 const show=id=>['lobby','pick','reveal','game'].forEach(i=>$(i).classList.toggle('hide',i!==id));
-function sync(){if(NET.role==='host'&&NET.conn&&NET.conn.open)NET.conn.send(JSON.stringify({t:'s',phase,P,G,names:NAMES}))}
+// Lo que le llega al invitado: sin los datos de las figuritas que todavía no puede ver
+function viewFor(w){
+  return{phase,names:NAMES,
+    P:P&&{pool:P.pool.map(c=>({o:c.o,mi:phase!=='pick'&&c.o===w?c.mi:-1})),lead:P.lead.map((l,k)=>k===w?l:0),ready:P.ready},
+    G:G&&{...G,pl:G.pl.map((p,k)=>({...p,mons:p.mons.map(mm=>k===w||mm.shown?mm:{hidden:true})}))}};
+}
+function sync(){if(NET.role==='host'&&NET.conn&&NET.conn.open)NET.conn.send(JSON.stringify({t:'s',...viewFor(1)}))}
+
+/* ---- Sonidos (se generan con el navegador, no hay archivos) ---- */
+let AC=null,MUTE=false;try{MUTE=localStorage.getItem('mute')==='1'}catch(e){}
+const ac=()=>{if(!AC){try{AC=new(window.AudioContext||window.webkitAudioContext)()}catch(e){return null}}if(AC.state==='suspended')AC.resume();return AC};
+function tone(f,t,d,type,v,f2){const c=ac();if(!c||MUTE)return;const T=c.currentTime+t,o=c.createOscillator(),g=c.createGain();o.type=type||'sine';o.frequency.setValueAtTime(f,T);if(f2)o.frequency.exponentialRampToValueAtTime(f2,T+d);g.gain.setValueAtTime(v||.15,T);g.gain.exponentialRampToValueAtTime(.001,T+d);o.connect(g);g.connect(c.destination);o.start(T);o.stop(T+d+.02)}
+function noise(t,d,v,fc,type){const c=ac();if(!c||MUTE)return;const T=c.currentTime+t,n=Math.max(1,Math.floor(c.sampleRate*d)),b=c.createBuffer(1,n,c.sampleRate),a=b.getChannelData(0);for(let i=0;i<n;i++)a[i]=Math.random()*2-1;const s=c.createBufferSource(),f=c.createBiquadFilter(),g=c.createGain();s.buffer=b;f.type=type||'bandpass';f.frequency.value=fc||1000;g.gain.setValueAtTime(v||.2,T);g.gain.exponentialRampToValueAtTime(.001,T+d);s.connect(f);f.connect(g);g.connect(c.destination);s.start(T)}
+const SFX={
+ roll(){for(let i=0;i<7;i++){const t=i*.075+Math.random()*.03;noise(t,.05,.3,2200+Math.random()*2000);tone(260+Math.random()*260,t,.04,'square',.04)}},
+ six(){[660,880,1320].forEach((f,i)=>tone(f,.55+i*.1,.25,'triangle',.18))},
+ miss(){tone(190,.55,.18,'sine',.1,120)},
+ atk(){noise(0,.18,.5,1600);tone(170,0,.22,'sawtooth',.18,60)},
+ sp(){tone(90,0,.55,'sawtooth',.28,30);noise(0,.5,.55,600);tone(1000,0,.3,'square',.08,150);noise(.2,.4,.4,900)},
+ ko(){tone(420,0,.7,'sawtooth',.16,50);noise(.1,.4,.25,400,'lowpass')},
+ swap(){noise(0,.35,.25,500,'lowpass');tone(280,0,.3,'sine',.1,900)},
+ win(){[523,659,784,1047].forEach((f,i)=>tone(f,.5+i*.16,.35,'square',.12));tone(1047,1.2,.6,'triangle',.15)},
+ pick(){tone(720,0,.06,'square',.07)},
+ flip(){noise(0,.14,.18,3200)}
+};
+const play=t=>{if(SFX[t])SFX[t]()};
 
 /* ---- Reparto a ciegas ---- */
 function newPick(){
   phase='pick';show('pick');
-  P={pool:shuffle(M.map((_,i)=>i)).slice(0,12).map(mi=>({mi,o:null}))};
+  P={pool:shuffle(M.map((_,i)=>i)).slice(0,12).map(mi=>({mi,o:null})),lead:[0,0],ready:[false,false]};rvPeek=false;
   renderPick();
 }
 function renderPick(){
@@ -225,23 +253,34 @@ function renderPick(){
 }
 function reveal(){
   phase='reveal';show('reveal');
-  $('rv').innerHTML=[0,1].map(k=>`<h2>${nm(k)}</h2><div class="grid">${P.pool.filter(c=>c.o===k).map((c,i)=>`<div class="${cls(M[c.mi])} flip" style="animation-delay:${(k*2+i)*.4}s">${fig(M[c.mi])}</div>`).join('')}</div>`).join('');
-  sync();
+  const local=ME===null,k=local?(P.ready[0]?1:0):ME,fl=rvFresh?' flip':'';
+  let h;
+  if(P.ready[k])h=`<h2>${nm(k)}</h2><p class="rules">Listo. Esperando que el otro jugador elija…</p>`;
+  else if(local&&!rvPeek)h=`<h2>${nm(k)}</h2><p class="rules">Pasale la pantalla a ${nm(k)} y que el otro jugador no mire. Cuando estés listo, tocá el botón para ver tus figuritas.</p><button class="b" id="peekBtn">Ver mis figuritas</button>`;
+  else{
+    const cs=P.pool.filter(c=>c.o===k);
+    h=`<h2>${nm(k)}: estas son tus figuritas</h2><p class="rules">Tocá la que querés que salga a pelear primero. La otra queda oculta para tu rival hasta que entre al combate, porque cambiaste de monstruo o cayó el primero.</p><div class="grid">${cs.map((c,i)=>`<button class="${cls(M[c.mi])}${fl}${i===P.lead[k]?' lead':''}" data-lead="${i}" style="animation-delay:${i*.3}s" aria-pressed="${i===P.lead[k]}">${fig(M[c.mi])}${i===P.lead[k]?'<div class="own">Sale primero</div>':''}</button>`).join('')}</div><p><button class="b" id="readyBtn">Listo</button></p>`;
+    if(rvFresh)play('flip');
+  }
+  rvFresh=false;
+  $('rv').innerHTML=h;sync();
 }
 function startGame(){
-  const mk=k=>({mons:P.pool.filter(c=>c.o===k).map(c=>({m:M[c.mi],hp:M[c.mi].hp,max:M[c.mi].hp})),a:0,t:0});
-  G={pl:[mk(0),mk(1)],turn:0,rolled:false,busy:false,over:false,die:0,rollN:0,hitK:0,hitN:0,log:[`${nm(0)} empieza. Tirá el dado o cambiá de monstruo.`]};
-  phase='game';show('game');render();
+  const mk=k=>{const cs=P.pool.filter(c=>c.o===k).map(c=>({m:M[c.mi],hp:M[c.mi].hp,max:M[c.mi].hp,shown:false}));if(P.lead[k]===1)cs.reverse();cs[0].shown=true;return{mons:cs,a:0,t:0}};
+  G={pl:[mk(0),mk(1)],turn:0,rolled:false,busy:false,over:false,die:0,rollN:0,hitK:0,hitN:0,evN:0,fx:[],log:[`${nm(0)} empieza. Tirá el dado o cambiá de monstruo.`]};
+  lastEv=0;phase='game';show('game');render();
 }
 
 /* ---- Partida ---- */
 const act=k=>G.pl[k].mons[G.pl[k].a],ben=k=>G.pl[k].mons[1-G.pl[k].a],cur=()=>act(G.turn);
 function sideHTML(k){
-  const p=G.pl[k],m=act(k),b=ben(k);
+  const p=G.pl[k],m=act(k),b=ben(k),own=ME===k||(ME===null&&peekK===k),vis=!b.hidden&&(b.shown||own);
+  const bench=!vis?'En el banco: una figurita oculta':`En el banco: ${b.m.n} · ${b.hp}/${b.max}${b.hp<=0?' (fuera de combate)':''} · ${b.m.a1} ${b.m.b} / ${b.m.a2} ${b.m.s}${!b.shown?' (oculta para tu rival)':''}`;
+  const pk=ME===null&&!b.hidden&&!b.shown&&b.hp>0?` <button class="b sm peek" data-k="${k}">Ver mi banco (3 s)</button>`:'';
   return `<div class="${cls(m.m)}">${fig(m.m)}</div>
   <div class="hpbar"><i style="width:${m.hp/m.max*100}%"></i></div>
   <div class="row"><strong>${nm(k)}: ${m.hp} / ${m.max}</strong><span>Pepitas: ${[0,1,2,3].map(i=>`<i class="coin${p.t>i?'':' off'}"></i>`).join('')}</span></div>
-  <div class="bench">En el banco: ${b.m.n} · ${b.hp>0?`${b.hp} / ${b.max}`:'fuera de combate'}</div>`;
+  <div class="bench">${bench}${pk}</div>`;
 }
 function can(a,who){
   if(!G||phase!=='game'||G.busy||G.over)return false;
@@ -260,14 +299,17 @@ function render(){
   $('die').textContent=G.die||'?';
   if(G.rollN!==lastRoll){lastRoll=G.rollN;if(G.rollN){const el=$('die');el.classList.remove('go');void el.offsetWidth;el.classList.add('go')}}
   if(G.hitN!==lastHit){lastHit=G.hitN;if(G.hitN){const b=$('s'+G.hitK);b.classList.add('hit');setTimeout(()=>b.classList.remove('hit'),600)}}
+  if(G.evN<lastEv)lastEv=0;
+  (G.fx||[]).forEach(e=>{if(e.i>lastEv){lastEv=e.i;play(e.t)}});
   $('again').classList.toggle('hide',!G.over);
   $('log').innerHTML=G.log.slice(0,3).map(x=>`<div>${x}</div>`).join('');
   sync();
 }
 const say=t=>G.log.unshift(t);
+function ev(t){G.evN=(G.evN||0)+1;G.fx=(G.fx||[]).slice(-7);G.fx.push({i:G.evN,t})}
 async function roll(){
   const d=rnd(),pl=G.pl[G.turn],mo=cur(),w=nm(G.turn);
-  G.die=d;G.rollN++;
+  G.die=d;G.rollN++;ev('roll');ev(d>=mo.m.th?'six':'miss');
   if(d>=mo.m.th){
     if(pl.t<4){pl.t++;say(`${w} sacó un ${d}: ¡gana una pepita!`)}
     else say(`${w} sacó un ${d}, pero ya tiene el máximo de pepitas.`);
@@ -278,18 +320,18 @@ async function hit(kind){
   const a=cur(),pl=G.pl[G.turn],k=1-G.turn,d=act(k),sp=kind==='sp',dmg=sp?a.m.s:a.m.b;
   pl.t-=sp?4:2;
   say(`${nm(G.turn)}: ¡${sp?a.m.a2:a.m.a1}! ${dmg} de daño a ${d.m.n}.`);
-  d.hp=Math.max(0,d.hp-dmg);G.hitK=k;G.hitN++;render();await wait(600);
+  d.hp=Math.max(0,d.hp-dmg);G.hitK=k;G.hitN++;ev(sp?'sp':'atk');render();await wait(600);
   if(d.hp<=0){
-    const b=ben(k);say(`${d.m.n} quedó fuera de combate.`);
-    if(b.hp>0){G.pl[k].a=1-G.pl[k].a;say(`${nm(k)} saca a ${b.m.n}.`)}
-    else{G.over=true;say(`${nm(k)} se quedó sin monstruos. ¡Gana ${nm(G.turn)}!`)}
+    const b=ben(k);say(`${d.m.n} quedó fuera de combate.`);ev('ko');
+    if(b.hp>0){G.pl[k].a=1-G.pl[k].a;b.shown=true;ev('swap');say(`${nm(k)} saca a ${b.m.n}.`)}
+    else{G.over=true;ev('win');say(`${nm(k)} se quedó sin monstruos. ¡Gana ${nm(G.turn)}!`)}
   }
   render();
 }
 function swap(){
   const pl=G.pl[G.turn],old=cur(),before=old.hp;
   old.hp=Math.min(old.max,old.hp+10+Math.floor(Math.random()*11));
-  pl.a=1-pl.a;
+  pl.a=1-pl.a;cur().shown=true;ev('swap');
   say(`${nm(G.turn)} cambia a ${cur().m.n}. ${old.m.n} descansa y recupera ${old.hp-before} de vida.`);
 }
 function endTurn(){
@@ -311,10 +353,18 @@ function perform(a,i,who){
     const k=took(0)<2?0:1,c=P.pool[i];
     if((who!==null&&who!==k)||!c||c.o!==null)return;
     c.o=k;
-    if(took(0)===2&&took(1)===2)reveal();else renderPick();
+    if(took(0)===2&&took(1)===2){rvFresh=true;reveal()}else renderPick();
     return;
   }
-  if(a==='go'){if(phase==='reveal')startGame();return}
+  if(a==='lead'||a==='ready'){
+    if(phase!=='reveal')return;
+    const k=who!==null?who:(P.ready[0]?1:0);
+    if(P.ready[k])return;
+    if(a==='lead'){if(i===0||i===1)P.lead[k]=i;reveal();return}
+    P.ready[k]=true;rvPeek=false;
+    if(P.ready[0]&&P.ready[1])startGame();else{rvFresh=true;reveal()}
+    return;
+  }
   if(a==='again'){if(phase==='game'&&G.over)newPick();return}
   if(!can(a,who))return;
   ({roll:doRoll,atk:doAtk,sp:doSp,swap:doSwap,keep:doKeep})[a]();
@@ -323,9 +373,14 @@ function dispatch(a,i){
   if(NET.role==='guest'){if(NET.conn&&NET.conn.open)NET.conn.send(JSON.stringify({t:'a',a,i}));return}
   perform(a,i,NET.role==='host'?0:null);
 }
-$('grid').onclick=e=>{const b=e.target.closest('button');if(b&&!b.disabled)dispatch('pick',+b.dataset.i)};
+$('grid').onclick=e=>{const b=e.target.closest('button');if(b&&!b.disabled){play('pick');dispatch('pick',+b.dataset.i)}};
 ['roll','atk','sp','swap','keep'].forEach(a=>$(a+'Btn').onclick=()=>dispatch(a));
-$('goBtn').onclick=()=>dispatch('go');
+$('rv').onclick=e=>{
+  if(e.target.closest('#peekBtn')){rvPeek=true;rvFresh=true;reveal();return}
+  const l=e.target.closest('[data-lead]');if(l){play('pick');dispatch('lead',+l.dataset.lead);return}
+  if(e.target.closest('#readyBtn')){play('pick');dispatch('ready')}
+};
+$('s0').onclick=$('s1').onclick=e=>{const b=e.target.closest('.peek');if(!b)return;peekK=+b.dataset.k;render();setTimeout(()=>{peekK=null;if(G&&phase==='game')render()},3000)};
 $('again').onclick=()=>dispatch('again');
 [0,1].forEach(k=>{$('n'+k).oninput=e=>{NAMES[k]=e.target.value.trim()||'Jugador '+(k+1);renderPick()}});
 
@@ -340,9 +395,9 @@ function lost(){
   if(was){phase='lobby';show('lobby');netMsg('Se cortó la conexión con el otro jugador. Creen una sala nueva para seguir.')}
 }
 function applySnap(d){
-  P=d.P;G=d.G;NAMES[0]=d.names[0];NAMES[1]=d.names[1];phase=d.phase;
+  const prev=phase;P=d.P;G=d.G;NAMES[0]=d.names[0];NAMES[1]=d.names[1];phase=d.phase;
   if(phase==='pick'){show('pick');renderPick()}
-  else if(phase==='reveal')reveal();
+  else if(phase==='reveal'){if(prev!=='reveal')rvFresh=true;reveal()}
   else if(G){show('game');render()}
 }
 function onHostMsg(raw){
@@ -384,6 +439,9 @@ function joinRoom(){
 $('hostBtn').onclick=hostRoom;
 $('joinBtn').onclick=joinRoom;
 $('localBtn').onclick=()=>{if(NET.peer)try{NET.peer.destroy()}catch(e){}NET={role:null,conn:null,peer:null};ME=null;newPick()};
+const updMute=()=>{$('muteBtn').textContent=MUTE?'🔇':'🔊';$('muteBtn').setAttribute('aria-label',MUTE?'Activar sonidos':'Silenciar sonidos')};
+$('muteBtn').onclick=()=>{MUTE=!MUTE;try{localStorage.setItem('mute',MUTE?'1':'0')}catch(e){}updMute();if(!MUTE)play('pick')};
+updMute();
 show('lobby');
 </script>
 </body>
