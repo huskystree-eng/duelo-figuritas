@@ -131,6 +131,9 @@ details.rules summary{cursor:pointer;color:var(--gold);font-weight:700;margin-bo
   .side .row strong{font-size:.76rem}
 }
 @media (max-width:370px){.side .info span{font-size:.6rem}.side .row strong{font-size:.7rem}}
+#sides{grid-column:1/-1;order:1;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+#sides .side:last-child:nth-child(odd){grid-column:1/-1}
+.side.tgt{outline:3px dashed #ff5a3c}.side.dead{opacity:.4}
 </style>
 </head>
 <body>
@@ -143,7 +146,8 @@ details.rules summary{cursor:pointer;color:var(--gold);font-weight:700;margin-bo
   <div class="box">
     <label class="fld">Tu nombre<input id="myname" maxlength="14" placeholder="Tu nombre" autocomplete="off"></label>
     <label class="fld">Tiempo por turno<select id="limit"><option value="0">Sin límite</option><option value="20">20 segundos</option><option value="30">30 segundos</option><option value="45" selected>45 segundos</option><option value="60">60 segundos</option></select></label>
-    <p class="rules">El nombre se usa online y contra la compu. El tiempo vale en todos los modos (online, el de quien crea la sala). Si se acaba, perdés el turno.</p>
+    <label class="fld">Formato (en "Jugar acá" y "Online")<select id="fmt"><option value="ffa2">1 contra 1</option><option value="ffa3">Todos contra todos: 3 jugadores</option><option value="ffa4">Todos contra todos: 4 jugadores</option><option value="team">2 contra 2 (equipos)</option></select></label>
+    <p class="rules">El nombre se usa online y contra la compu. El formato y el tiempo valen online (los elige quien crea la sala) y en pantalla compartida. Contra la compu siempre es 1 contra 1. Si se acaba, perdés el turno.</p>
   </div>
   <div class="box">
     <h2>Contra la compu</h2>
@@ -152,11 +156,11 @@ details.rules summary{cursor:pointer;color:var(--gold);font-weight:700;margin-bo
   </div>
   <div class="box">
     <h2>En este dispositivo</h2>
-    <p class="rules">Los dos jugadores comparten pantalla y se pasan el turno.</p>
+    <p class="rules">Todos comparten pantalla y se pasan el turno (según el formato elegido arriba).</p>
     <button class="b" id="localBtn">Jugar acá</button>
   </div>
   <div class="box">
-    <h2>Online: cada uno en su dispositivo</h2>
+    <h2>Online: cada uno en su dispositivo (2, 3 o 4 jugadores)</h2>
     <p><button class="b" id="hostBtn">Crear sala</button></p>
     <label class="fld">Código de la sala<input id="code" maxlength="4" placeholder="K7QP" autocomplete="off"></label>
     <p><button class="b" id="joinBtn">Unirme a la sala</button></p>
@@ -165,10 +169,10 @@ details.rules summary{cursor:pointer;color:var(--gold);font-weight:700;margin-bo
 </section>
 
 <section id="pick">
-  <div class="names" id="names"><label>Nombre del Jugador 1<input id="n0" maxlength="14" placeholder="Jugador 1" autocomplete="off"></label><label>Nombre del Jugador 2<input id="n1" maxlength="14" placeholder="Jugador 2" autocomplete="off"></label></div>
+  <div class="names" id="names"></div>
   <h2 id="pt"></h2>
   <details class="rules"><summary>Cómo se juega (tocá para ver)</summary><p>Sobre la mesa hay figuritas boca abajo y nadie sabe cuáles son. Cada jugador toma 2 a ciegas. Después cada uno ve solo sus propias figuritas y elige con cuál arrancar. La otra queda oculta para el rival hasta que entre al combate.<br>
-  <b>Cómo se juega:</b> en tu turno tirás el dado y sumás ese número a tus puntos. Cada 6 puntos podés canjearlos por una piedra de energía, y lo que sobra se guarda para el próximo turno. Si sacás un 6 directo, tirás de nuevo (hasta 2 veces extra). Ataque básico: 2 piedras. Ataque fuerte: 4 piedras. <b>Evolucionar:</b> podés pagar 2 piedras para hacer evolucionar a tu monstruo activo si posee una fase siguiente, aumentando sus HP y su poder de ataque. En tu turno también podés cambiar de monstruo: el que va al banco recupera entre 10 y 20 HP. Perdés cuando tus dos monstruos quedan fuera de combate.</p></details>
+  <b>Cómo se juega:</b> en tu turno tirás el dado y sumás ese número a tus puntos. Cada 6 puntos podés canjearlos por una piedra de energía, y lo que sobra se guarda para el próximo turno. Si sacás un 6 directo, tirás de nuevo (hasta 2 veces extra). Ataque básico: 2 piedras. Ataque fuerte: 4 piedras. <b>Evolucionar:</b> podés pagar 2 piedras para hacer evolucionar a tu monstruo activo si posee una fase siguiente, aumentando sus HP y su poder de ataque. En tu turno también podés cambiar de monstruo: el que va al banco recupera entre 10 y 20 HP. Quedás eliminado cuando tus dos monstruos caen. <b>3 o 4 jugadores:</b> todos contra todos, gana el último en pie; antes de atacar tocá al rival que querés pegarle. <b>2 contra 2:</b> los equipos son Jugador 1 y 3 contra Jugador 2 y 4; gana el equipo que deja sin monstruos al otro.</p></details>
   <div class="grid" id="grid"></div>
 </section>
 
@@ -178,7 +182,7 @@ details.rules summary{cursor:pointer;color:var(--gold);font-weight:700;margin-bo
 
 <section id="game" class="hide">
   <div class="arena">
-    <div class="side" id="s0"></div>
+    <div id="sides"></div>
     <div class="banner" id="banner"></div>
     <div class="mid">
       <div class="die" id="die">?</div>
@@ -190,7 +194,6 @@ details.rules summary{cursor:pointer;color:var(--gold);font-weight:700;margin-bo
       <button class="b" id="swapBtn">Cambiar monstruo (el que sale recupera 10 a 20 HP)</button>
       <button class="b" id="keepBtn">Terminar turno</button>
     </div>
-    <div class="side" id="s1"></div>
     <div class="log" id="log" aria-live="polite"></div>
     <button class="b hide" id="again">Nueva partida</button>
   </div>
@@ -451,19 +454,24 @@ const fig=m=>`<div class="oval"><b>${m.id}</b><img alt="" src="${IMG}${m.id}.png
 <div class="info"><div>ELEMENTO<span>${m.el}</span></div><div>ESTADO · HP<span>${m.st==='L'?'Legendario':m.st} · ${m.hp} HP</span></div><div>ATAQUE (2 piedras)<span>${m.a1} · ${m.b}</span></div><div>ATAQUE FUERTE (4 piedras)<span>${m.a2} · ${m.s}</span></div></div>
 <div class="tag">#${m.id} ${m.n}</div>`;
 const cls=m=>'fig '+m.cl;
-let P,G=null,phase='lobby',ME=null,NET={role:null,conn:null,peer:null},lastRoll=-1,lastHit=-1,lastEv=0,rvPeek=false,rvFresh=false,peekK=null,BOT=false,botPending=false,lastTickLeft=-1;
+let P,G=null,phase='lobby',ME=null,NET={role:null,conn:null,conns:[],hi:[],peer:null},N=2,TEAM=false,TG=-1,lastRoll=-1,lastHit=-1,lastEv=0,rvPeek=false,rvFresh=false,peekK=null,BOT=false,botPending=false,lastTickLeft=-1;
 const shuffle=a=>{a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
 const esc=t=>String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const NAMES=['Jugador 1','Jugador 2'];
 const nm=k=>esc(NAMES[k]),took=k=>P.pool.filter(c=>c.o===k).length;
+const nextPick=()=>{for(let k=0;k<N;k++)if(took(k)<2)return k;return 0};
+function setFmt(v){v=v||$('fmt').value;TEAM=v==='team';N=TEAM?4:+v.slice(3);NAMES.length=0;for(let k=0;k<N;k++)NAMES.push('Jugador '+(k+1));$('names').innerHTML=''}
+function buildNames(){$('names').innerHTML=NAMES.map((_,k)=>`<label>Nombre del Jugador ${k+1}${TEAM?' (Equipo '+(k%2?'B':'A')+')':''}<input data-k="${k}" maxlength="14" placeholder="Jugador ${k+1}" autocomplete="off"></label>`).join('')}
+const foes=k=>G.pl.map((_,j)=>j).filter(j=>j!==k&&!G.pl[j].dead&&(!TEAM||j%2!==k%2));
+const tgt=()=>{const f=foes(G.turn);return f.includes(TG)?TG:f[0]};
 function show(id){['lobby','pick','reveal','game'].forEach(i=>$(i).classList.toggle('hide',i!==id));chatVis()}
 // Lo que le llega al invitado: sin los datos de las figuritas que todavía no puede ver
 function viewFor(w){
-  return{phase,names:NAMES,
+  return{phase,names:NAMES,team:TEAM,
     P:P&&{pool:P.pool.map(c=>({o:c.o,mi:phase!=='pick'&&c.o===w?c.mi:-1})),lead:P.lead.map((l,k)=>k===w?l:0),ready:P.ready},
     G:G&&{...G,tleft:Math.max(0,((G.turnEnd||0)-Date.now())/1000),pl:G.pl.map((p,k)=>({...p,mons:p.mons.map(mm=>k===w||mm.shown?mm:{hidden:true})}))}};
 }
-function sync(){if(NET.role==='host'&&NET.conn&&NET.conn.open)NET.conn.send(JSON.stringify({t:'s',...viewFor(1)}))}
+function sync(){if(NET.role==='host')NET.conns.forEach((c,k)=>{if(k&&c&&c.open&&NET.hi[k])c.send(JSON.stringify({t:'s',...viewFor(k)}))})}
 
 /* ---- Sonidos (se generan con el navegador, no hay archivos) ---- */
 let AC=null,MUTE=false;try{MUTE=localStorage.getItem('mute')==='1'}catch(e){}
@@ -492,22 +500,23 @@ const play=t=>{if(SFX[t])SFX[t]()};
 /* ---- Reparto a ciegas ---- */
 function newPick(){
   phase='pick';show('pick');
-  P={pool:shuffle(M.map((_,i)=>i)).slice(0,12).map(mi=>({mi,o:null})),lead:[0,0],ready:[false,false]};rvPeek=false;
+  if($('names').children.length!==N)buildNames();
+  P={pool:shuffle(M.map((_,i)=>i)).slice(0,12).map(mi=>({mi,o:null})),lead:Array(N).fill(0),ready:Array(N).fill(false)};rvPeek=false;
   renderPick();
 }
 function renderPick(){
   $('names').classList.toggle('hide',!!NET.role||BOT);$('grid').className='grid pickgrid';
-  const k=took(0)<2?0:1,mine=ME===null||k===ME;
+  const k=nextPick(),mine=ME===null||k===ME;
   $('pt').innerHTML=mine?`${nm(k)}: tomá 2 figuritas boca abajo (${took(k)}/2)`:`Esperando que ${nm(k)} elija sus figuritas…`;
   $('grid').innerHTML=P.pool.map((c,i)=>`<button class="fig cback" data-i="${i}" ${c.o!==null||!mine?'disabled':''} aria-label="Figurita boca abajo ${i+1}"><div class="ball"></div><div class="bt">¡Atrápalos ya!</div>${c.o!==null?`<div class="own">${nm(c.o)}</div>`:''}</button>`).join('');
   sync();
 }
 function reveal(){
   phase='reveal';show('reveal');
-  const local=ME===null,k=local?(P.ready[0]?1:0):ME,fl=rvFresh?' flip':'';
+  const local=ME===null,k=local?Math.max(0,P.ready.indexOf(false)):ME,fl=rvFresh?' flip':'';
   let h;
   if(P.ready[k])h=`<h2>${nm(k)}</h2><p class="rules">Listo. Esperando que el otro jugador elija…</p>`;
-  else if(local&&!rvPeek)h=`<h2>${nm(k)}</h2><p class="rules">Pasale la pantalla a ${nm(k)} y que el otro jugador no mire. Cuando estés listo, tocá el botón para ver tus figuritas.</p><button class="b" id="peekBtn">Ver mis figuritas</button>`;
+  else if(local&&!rvPeek)h=`<h2>${nm(k)}</h2><p class="rules">Pasale la pantalla a ${nm(k)} y que los demás no miren. Cuando estés listo, tocá el botón para ver tus figuritas.</p><button class="b" id="peekBtn">Ver mis figuritas</button>`;
   else{
     const cs=P.pool.filter(c=>c.o===k);
     h=`<h2>${nm(k)}: estas son tus figuritas</h2><p class="rules">Tocá la que querés que salga a pelear primero. La otra queda oculta para tu rival hasta que entre al combate, porque cambiaste de monstruo o cayó el primero.</p><div class="grid">${cs.map((c,i)=>`<button class="${cls(M[c.mi])}${fl}${i===P.lead[k]?' lead':''}" data-lead="${i}" style="animation-delay:${i*.3}s" aria-pressed="${i===P.lead[k]}">${fig(M[c.mi])}${i===P.lead[k]?'<div class="own">Sale primero</div>':''}</button>`).join('')}</div><p><button class="b" id="readyBtn">Listo</button></p>`;
@@ -517,8 +526,8 @@ function reveal(){
   $('rv').innerHTML=h;sync();
 }
 function startGame(){
-  const mk=k=>{const cs=P.pool.filter(c=>c.o===k).map(c=>({m:M[c.mi],hp:M[c.mi].hp,max:M[c.mi].hp,shown:false}));if(P.lead[k]===1)cs.reverse();cs[0].shown=true;return{mons:cs,a:0,t:0,pts:0}};
-  G={pl:[mk(0),mk(1)],turn:0,rolled:false,bonus:false,extra:0,busy:false,over:false,die:0,rollN:0,hitK:0,hitN:0,evN:0,fx:[],log:[`${nm(0)} empieza. Tirá el dado o cambiá de monstruo.`]};
+  const mk=k=>{const cs=P.pool.filter(c=>c.o===k).map(c=>({m:M[c.mi],hp:M[c.mi].hp,max:M[c.mi].hp,shown:false}));if(P.lead[k]===1)cs.reverse();cs[0].shown=true;return{mons:cs,a:0,t:0,pts:0,dead:false}};
+  G={pl:NAMES.map((_,k)=>mk(k)),turn:0,rolled:false,bonus:false,extra:0,busy:false,over:false,die:0,rollN:0,hitK:0,hitN:0,evN:0,fx:[],log:[`${nm(0)} empieza. Tirá el dado o cambiá de monstruo.`]};
   G.limit=+$('limit').value||0;G.turnEnd=Date.now()+G.limit*1000;
   lastEv=0;phase='game';show('game');render();
 }
@@ -537,7 +546,7 @@ function sideHTML(k){
   const pk=ME===null&&!b.hidden&&!b.shown&&b.hp>0?` <button class="b sm peek" data-k="${k}">Ver mi banco (3 s)</button>`:'';
   return `<div class="${cls(m.m)}">${fig(m.m)}</div>
   <div class="hpbar"><i style="width:${(m.hp/m.max)*100}%"></i></div>
-  <div class="row"><strong>${nm(k)}: ${m.hp} / ${m.max} HP</strong><span class="lbl"><span class="lg">Piedras de energía: </span><span class="sh">Piedras </span>${[0,1,2,3].map(i=>`<i class="coin${p.t>i?'':' off'}"></i>`).join('')}</span></div>
+  <div class="row"><strong>${nm(k)}${TEAM?' · Eq. '+(k%2?'B':'A'):''}${p.dead?' · Eliminado':''}: ${m.hp} / ${m.max} HP</strong><span class="lbl"><span class="lg">Piedras de energía: </span><span class="sh">Piedras </span>${[0,1,2,3].map(i=>`<i class="coin${p.t>i?'':' off'}"></i>`).join('')}</span></div>
   <div class="pts">Puntos: <b>${p.pts}</b> <span class="pbar"><i style="width:${Math.min(100,p.pts/6*100)}%"></i></span> <small>6 puntos = 1 piedra</small></div>
   <div class="bench">${bench}${pk}</div>`;
 }
@@ -557,12 +566,13 @@ function can(a,who){
 }
 
 function render(){
-  $('s0').innerHTML=sideHTML(0);$('s1').innerHTML=sideHTML(1);
-  [0,1].forEach(k=>$('s'+k).classList.toggle('turn',G.turn===k&&!G.over));
+  const S=$('sides');if(S.children.length!==G.pl.length)S.innerHTML=G.pl.map((_,k)=>`<div class="side" id="s${k}"></div>`).join('');
+  const fo=G.over?[]:foes(G.turn),acting=ME===null||G.turn===ME,tg=fo.length?tgt():-1;
+  G.pl.forEach((p,k)=>{const e=$('s'+k);e.innerHTML=sideHTML(k);e.classList.toggle('turn',G.turn===k&&!G.over);e.classList.toggle('dead',!!p.dead);e.classList.toggle('tgt',acting&&fo.length>1&&k===tg)});
   const mo=cur(),mine=ME!==null&&G.turn===ME;
   const nextEvo = getNextEvo(mo.m);
 
-  $('banner').innerHTML=(G.over?'Fin de la partida':mine?`¡Es tu turno! (${mo.m.n})`:`Turno de ${nm(G.turn)} (${mo.m.n})`)+(G.over?'':'<span id="clock" class="clock"></span>');
+  $('banner').innerHTML=(G.over?'Fin de la partida':mine?`¡Es tu turno! (${mo.m.n})`:`Turno de ${nm(G.turn)} (${mo.m.n})`)+(G.over?'':'<span id="clock" class="clock"></span>')+(acting&&fo.length>1?`<div class="rules">Atacás a ${nm(tg)} · tocá a otro rival para cambiar</div>`:'');
   $('atkBtn').textContent=`${mo.m.a1} · ${mo.m.b} HP (2 piedras)`;
   $('spBtn').textContent=`${mo.m.a2} · ${mo.m.s} HP (4 piedras)`;
   $('evoBtn').textContent=nextEvo?`Evolucionar a ${nextEvo.n} (2 piedras)`:`Sin evolución disponible`;
@@ -596,15 +606,17 @@ async function roll(){
   G.rolled=true;render();await wait(800);
 }
 
-async function hit(kind){
-  const a=cur(),pl=G.pl[G.turn],k=1-G.turn,d=act(k),sp=kind==='sp',dmg=sp?a.m.s:a.m.b;
+async function hit(kind,t){
+  const a=cur(),pl=G.pl[G.turn],f=foes(G.turn),k=f.includes(t)?t:f[0],d=act(k),sp=kind==='sp',dmg=sp?a.m.s:a.m.b;
   pl.t-=sp?4:2;
   say(`${nm(G.turn)}: ¡${sp?a.m.a2:a.m.a1}! Quita ${dmg} HP a ${d.m.n}.`);
   d.hp=Math.max(0,d.hp-dmg);G.hitK=k;G.hitN++;ev(sp?'sp':'atk');render();await wait(600);
   if(d.hp<=0){
     const b=ben(k);say(`${d.m.n} quedó fuera de combate.`);ev('ko');
     if(b.hp>0){G.pl[k].a=1-G.pl[k].a;b.shown=true;ev('swap');say(`${nm(k)} saca a ${b.m.n}.`)}
-    else{G.over=true;ev('win');say(`${nm(k)} se quedó sin monstruos. ¡Gana ${nm(G.turn)}!`)}
+    else{G.pl[k].dead=true;say(`${nm(k)} quedó eliminado.`);
+      const lv=G.pl.map((p,j)=>p.dead?-1:j).filter(j=>j>=0);
+      if(new Set(lv.map(j=>TEAM?j%2:j)).size<2){G.over=true;ev('win');say(TEAM?`¡Gana el equipo de ${lv.map(nm).join(' y ')}!`:`¡Gana ${nm(lv[0])}!`)}}
   }
   render();
 }
@@ -633,7 +645,7 @@ function evolve(){
 
 function endTurn(){
   G.busy=false;
-  if(!G.over){G.turn=1-G.turn;G.rolled=false;G.bonus=false;G.extra=0;G.turnEnd=Date.now()+(G.limit||0)*1000;say(`Turno de ${nm(G.turn)}. Tirá el dado.`)}
+  if(!G.over){do{G.turn=(G.turn+1)%N}while(G.pl[G.turn].dead);G.rolled=false;G.bonus=false;G.extra=0;G.turnEnd=Date.now()+(G.limit||0)*1000;say(`Turno de ${nm(G.turn)}. Tirá el dado.`)}
   render();
 }
 
@@ -642,8 +654,8 @@ const doRoll=async()=>{G.busy=true;render();await roll();
   if(noActions()){await wait(400);endTurn()}else{G.busy=false;render()}};
 const doStone=()=>{const pl=G.pl[G.turn];pl.pts-=6;pl.t++;ev('stone');say(`${nm(G.turn)} canjea 6 puntos por una piedra de energía (le sobran ${pl.pts} puntos).`);render()};
 const doEvo=()=>{evolve();render();};
-const doAtk=async()=>{G.busy=true;render();await hit('at');endTurn()};
-const doSp=async()=>{G.busy=true;render();await hit('sp');endTurn()};
+const doAtk=async t=>{G.busy=true;render();await hit('at',t);endTurn()};
+const doSp=async t=>{G.busy=true;render();await hit('sp',t);endTurn()};
 const doSwap=async()=>{G.busy=true;swap();render();await wait(700);endTurn()};
 const doKeep=()=>{say(`${nm(G.turn)} pasa el turno.`);endTurn()};
 
@@ -651,25 +663,25 @@ const doKeep=()=>{say(`${nm(G.turn)} pasa el turno.`);endTurn()};
 function perform(a,i,who){
   if(a==='pick'){
     if(phase!=='pick')return;
-    const k=took(0)<2?0:1,c=P.pool[i];
+    const k=nextPick(),c=P.pool[i];
     if((who!==null&&who!==k)||!c||c.o!==null)return;
     c.o=k;
     if(BOT&&k===0&&took(0)===2)botPick();
-    if(took(0)===2&&took(1)===2){rvFresh=true;reveal()}else renderPick();
+    if(NAMES.every((_,j)=>took(j)===2)){rvFresh=true;reveal()}else renderPick();
     return;
   }
   if(a==='lead'||a==='ready'){
     if(phase!=='reveal')return;
-    const k=who!==null?who:(P.ready[0]?1:0);
+    const k=who!==null?who:Math.max(0,P.ready.indexOf(false));
     if(P.ready[k])return;
     if(a==='lead'){if(i===0||i===1)P.lead[k]=i;reveal();return}
     P.ready[k]=true;rvPeek=false;
-    if(P.ready[0]&&P.ready[1])startGame();else{rvFresh=true;reveal()}
+    if(P.ready.every(Boolean))startGame();else{rvFresh=true;reveal()}
     return;
   }
   if(a==='again'){if(phase==='game'&&G.over)newPick();return}
   if(!can(a,who))return;
-  ({roll:doRoll,stone:doStone,evo:doEvo,atk:doAtk,sp:doSp,swap:doSwap,keep:doKeep})[a]();
+  ({roll:doRoll,stone:doStone,evo:doEvo,atk:doAtk,sp:doSp,swap:doSwap,keep:doKeep})[a](i);
 }
 
 function dispatch(a,i){
@@ -678,15 +690,15 @@ function dispatch(a,i){
 }
 
 $('grid').onclick=e=>{const b=e.target.closest('button');if(b&&!b.disabled){play('pick');dispatch('pick',+b.dataset.i)}};
-['roll','stone','evo','atk','sp','swap','keep'].forEach(a=>$(a+'Btn').onclick=()=>dispatch(a));
+['roll','stone','evo','atk','sp','swap','keep'].forEach(a=>$(a+'Btn').onclick=()=>dispatch(a,a==='atk'||a==='sp'?tgt():undefined));
 $('rv').onclick=e=>{
   if(e.target.closest('#peekBtn')){rvPeek=true;rvFresh=true;reveal();return}
   const l=e.target.closest('[data-lead]');if(l){play('pick');dispatch('lead',+l.dataset.lead);return}
   if(e.target.closest('#readyBtn')){play('pick');dispatch('ready')}
 };
-$('s0').onclick=$('s1').onclick=e=>{const b=e.target.closest('.peek');if(!b)return;peekK=+b.dataset.k;render();setTimeout(()=>{peekK=null;if(G&&phase==='game')render()},3000)};
+$('sides').onclick=e=>{const b=e.target.closest('.peek');if(b){peekK=+b.dataset.k;render();setTimeout(()=>{peekK=null;if(G&&phase==='game')render()},3000);return}const sd=e.target.closest('.side');if(sd&&G&&phase==='game'){TG=+sd.id.slice(1);render()}};
 $('again').onclick=()=>dispatch('again');
-[0,1].forEach(k=>{$('n'+k).oninput=e=>{NAMES[k]=e.target.value.trim()||'Jugador '+(k+1);renderPick()}});
+$('names').oninput=e=>{const k=+e.target.dataset.k;NAMES[k]=e.target.value.trim()||'Jugador '+(k+1);renderPick()};
 
 /* ---- Reloj por turno ---- */
 function tick(){
@@ -753,15 +765,16 @@ function addChat(me,name,text){
 }
 function sendChat(text){
   text=String(text||'').trim().slice(0,200);
-  if(!text||!NET.conn||!NET.conn.open||Date.now()-lastChat<400)return false;
+  if(!text||!NET.role||(NET.role==='guest'&&!(NET.conn&&NET.conn.open))||Date.now()-lastChat<400)return false;
   lastChat=Date.now();
-  NET.conn.send(JSON.stringify({t:'chat',text}));
+  if(NET.role==='host')bc({t:'chat',name:NAMES[0],text});else NET.conn.send(JSON.stringify({t:'chat',text}));
   addChat(true,NAMES[ME],text);return true;
 }
 function resetChat(){CHAT=[];unread=0;renderChat();chatVis()}
 function onGuestMsg(raw){
   let d;try{d=JSON.parse(raw)}catch(e){return}
-  if(d.t==='chat')addChat(false,NAMES[0],String(d.text||'').slice(0,200));
+  if(d.t==='chat')addChat(false,String(d.name||'').slice(0,14),String(d.text||'').slice(0,200));
+  else if(d.t==='seat')ME=+d.k;
   else if(d.t==='s'){try{applySnap(d)}catch(e){}}
 }
 
@@ -770,35 +783,49 @@ const netMsg=t=>{$('netmsg').textContent=t};
 const needPeer=()=>typeof Peer!=='undefined'||(netMsg('No se pudo cargar PeerJS. Revisá tu conexión a internet.'),false);
 const cleanName=(v,d)=>String(v||'').trim().slice(0,14)||d;
 const makeCode=()=>Array.from({length:4},()=>'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random()*32)]).join('');
+const noNet=()=>({role:null,conn:null,conns:[],hi:[],peer:null});
+function bc(o,skip){NET.conns.forEach((c,k)=>{if(k&&k!==skip&&c&&c.open&&NET.hi[k])c.send(JSON.stringify(o))})}
 function lost(){
   if(NET.peer)try{NET.peer.destroy()}catch(e){}
-  const was=NET.role;NET={role:null,conn:null,peer:null};ME=null;
-  if(was){phase='lobby';show('lobby');netMsg('Se cortó la conexión con el otro jugador. Creen una sala nueva para seguir.')}
+  const was=NET.role;NET=noNet();ME=null;
+  if(was){phase='lobby';show('lobby');netMsg('Se cortó la conexión con otro jugador. Creen una sala nueva para seguir.')}
 }
 function applySnap(d){
-  const prev=phase;P=d.P;G=d.G;NAMES[0]=d.names[0];NAMES[1]=d.names[1];phase=d.phase;if(G)G.rx=Date.now();
+  const prev=phase;P=d.P;G=d.G;TEAM=!!d.team;NAMES.length=0;d.names.forEach(n=>NAMES.push(n));N=NAMES.length;phase=d.phase;if(G)G.rx=Date.now();
   if(phase==='pick'){show('pick');renderPick()}
   else if(phase==='reveal'){if(prev!=='reveal')rvFresh=true;reveal()}
   else if(G){show('game');render()}
 }
-function onHostMsg(raw){
+function roomMsg(){
+  const n=NET.hi.filter(Boolean).length+1;
+  $('netmsg').innerHTML=`Sala creada. Pasale este código a los demás: <b class="code">${NET.code}</b><br>Jugadores: ${n}/${N} (${NAMES.filter((x,k)=>k===0||NET.hi[k]).map(esc).join(', ')})<br>Esperando que se unan… (no cierres esta pestaña)`;
+}
+function onHostMsg(raw,k){
   let d;try{d=JSON.parse(raw)}catch(e){return}
-  if(d.t==='hello'){NAMES[1]=cleanName(d.name,'Jugador 2');newPick()}
-  else if(d.t==='chat')addChat(false,NAMES[1],String(d.text||'').slice(0,200));
-  else if(d.t==='a'&&typeof d.a==='string')perform(d.a,d.i,1);
+  if(d.t==='hello'){
+    if(NET.hi[k])return;
+    NAMES[k]=cleanName(d.name,'Jugador '+(k+1));NET.hi[k]=true;NET.conns[k].send(JSON.stringify({t:'seat',k}));
+    if(NET.conns.slice(1).every((c,j)=>NET.hi[j+1]))newPick();else roomMsg();
+  }
+  else if(!NET.hi[k])return;
+  else if(d.t==='chat'){const t=String(d.text||'').slice(0,200);addChat(false,NAMES[k],t);bc({t:'chat',name:NAMES[k],text:t},k)}
+  else if(d.t==='a'&&typeof d.a==='string')perform(d.a,d.i,k);
 }
 function hostRoom(){
   if(!needPeer())return;
   if(NET.peer)try{NET.peer.destroy()}catch(e){}
-  NAMES[0]=cleanName($('myname').value,'Jugador 1');
+  setFmt();NAMES[0]=cleanName($('myname').value,'Jugador 1');
   const code=makeCode(),peer=new Peer('duelofig-'+code);
-  NET={role:'host',conn:null,peer};ME=0;BOT=false;resetChat();
+  NET=noNet();NET.role='host';NET.peer=peer;NET.code=code;NET.conns=Array(N).fill(null);ME=0;BOT=false;resetChat();
   netMsg('Creando sala…');
-  peer.on('open',()=>{$('netmsg').innerHTML=`Sala creada. Pasale este código a tu rival: <b class="code">${code}</b><br>Esperando que se una… (no cierres esta pestaña)`});
+  peer.on('open',roomMsg);
   peer.on('error',e=>{if(e.type==='unavailable-id'){hostRoom()}else netMsg('No se pudo crear la sala ('+e.type+'). Probá de nuevo.')});
   peer.on('connection',c=>{
-    if(NET.conn&&NET.conn.open){c.close();return}
-    NET.conn=c;c.on('data',onHostMsg);c.on('close',lost);c.on('error',lost);
+    const k=NET.conns.findIndex((x,j)=>j>0&&!x);
+    if(k<0||phase!=='lobby'){c.close();return}
+    NET.conns[k]=c;c.on('data',r=>onHostMsg(r,k));
+    const gone=()=>{if(NET.conns[k]!==c)return;if(phase==='lobby'){NET.conns[k]=null;NET.hi[k]=false;roomMsg()}else lost()};
+    c.on('close',gone);c.on('error',gone);
   });
 }
 function joinRoom(){
@@ -807,7 +834,7 @@ function joinRoom(){
   if(code.length!==4){netMsg('Escribí el código de 4 letras que te pasó tu rival.');return}
   if(NET.peer)try{NET.peer.destroy()}catch(e){}
   const name=cleanName($('myname').value,'Jugador 2'),peer=new Peer();
-  NET={role:'guest',conn:null,peer};ME=1;BOT=false;NAMES[1]=name;resetChat();
+  NET=noNet();NET.role='guest';NET.peer=peer;ME=null;BOT=false;resetChat();
   netMsg('Conectando…');
   peer.on('open',()=>{
     const c=peer.connect('duelofig-'+code,{reliable:true});NET.conn=c;
@@ -820,8 +847,8 @@ function joinRoom(){
 }
 $('hostBtn').onclick=hostRoom;
 $('joinBtn').onclick=joinRoom;
-$('localBtn').onclick=()=>{if(NET.peer)try{NET.peer.destroy()}catch(e){}NET={role:null,conn:null,peer:null};ME=null;BOT=false;newPick()};
-$('botBtn').onclick=()=>{if(NET.peer)try{NET.peer.destroy()}catch(e){}NET={role:null,conn:null,peer:null};BOT=true;ME=0;NAMES[0]=cleanName($('myname').value,'Jugador 1');NAMES[1]='Compu';newPick()};
+$('localBtn').onclick=()=>{if(NET.peer)try{NET.peer.destroy()}catch(e){}NET=noNet();ME=null;BOT=false;setFmt();newPick()};
+$('botBtn').onclick=()=>{if(NET.peer)try{NET.peer.destroy()}catch(e){}NET=noNet();BOT=true;ME=0;setFmt('ffa2');NAMES[0]=cleanName($('myname').value,'Jugador 1');NAMES[1]='Compu';newPick()};
 $('chatTog').onclick=()=>{chatOpen=!chatOpen;if(chatOpen)unread=0;renderChat();chatVis()};
 $('chatSend').onclick=()=>{if(sendChat($('chatIn').value))$('chatIn').value=''};
 $('chatIn').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('chatSend').click()}};
