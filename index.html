@@ -4,8 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Duelo de Figuritas</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Russo+One&display=swap" rel="stylesheet" media="print" onload="this.media='all'"><noscript><link href="https://fonts.googleapis.com/css2?family=Russo+One&display=swap" rel="stylesheet"></noscript>
+<link href="https://fonts.googleapis.com/css2?family=Russo+One&display=swap" rel="stylesheet">
 <style>
 :root{--ink:#14101c;--paper:#f3efe6;--gold:#ffc928}
 *{box-sizing:border-box}
@@ -135,6 +134,9 @@ details.rules summary{cursor:pointer;color:var(--gold);font-weight:700;margin-bo
 #sides{grid-column:1/-1;order:1;display:grid;grid-template-columns:1fr 1fr;gap:8px}
 #sides .side:last-child:nth-child(odd){grid-column:1/-1}
 .side.tgt{outline:3px dashed #ff5a3c}.side.dead{opacity:.4}
+.lobbylog{flex:none;height:220px;background:#0004;border-radius:8px;padding:6px}
+.msg .mute{background:none;border:0;cursor:pointer;font-size:.8rem;padding:0 0 0 6px;opacity:.6}
+.msg .mute:hover,.msg .mute:focus-visible{opacity:1}
 </style>
 </head>
 <body>
@@ -150,6 +152,15 @@ details.rules summary{cursor:pointer;color:var(--gold);font-weight:700;margin-bo
     <label class="fld">Tiempo por turno<select id="limit"><option value="0">Sin límite</option><option value="20">20 segundos</option><option value="30">30 segundos</option><option value="45" selected>45 segundos</option><option value="60">60 segundos</option></select></label>
     <label class="fld">Formato (en "Jugar acá" y "Online")<select id="fmt"><option value="ffa2">1 contra 1</option><option value="ffa3">Todos contra todos: 3 jugadores</option><option value="ffa4">Todos contra todos: 4 jugadores</option><option value="team">2 contra 2 (equipos)</option></select></label>
     <p class="rules">El nombre se usa online y contra la compu. El formato y el tiempo valen online (los elige quien crea la sala) y en pantalla compartida. Contra la compu siempre es 1 contra 1. Si se acaba, perdés el turno.</p>
+  </div>
+  <div class="box">
+    <h2>💬 Chat general</h2>
+    <p class="rules">Sala abierta para todos los que están en el menú. Se ve con el nombre que escribiste arriba. Sé respetuoso.</p>
+    <div class="chatlog lobbylog" id="lcLog" role="log" aria-live="polite"><div class="msg">Conectando al chat…</div></div>
+    <div class="quick" id="lcQuick" style="margin:6px 0"><button data-q="👋 ¡Hola!" aria-label="Saludar">👋</button><button data-q="¿Alguien juega?" aria-label="Preguntar si alguien juega">🎮</button><button data-q="😂" aria-label="Enviar risa">😂</button><button data-q="¡Buena partida!" aria-label="Buena partida">👏</button><button data-q="🔥" aria-label="Enviar fuego">🔥</button></div>
+    <div class="chatin"><input id="lcIn" maxlength="200" placeholder="Escribí un mensaje…" aria-label="Mensaje al chat general" autocomplete="off"><button class="b sm" id="lcSend">Enviar</button></div>
+    <p class="rules" id="lcMsg" aria-live="polite"></p>
+    <p class="rules" id="lcMuted"></p>
   </div>
   <div class="box">
     <h2>Contra la compu</h2>
@@ -168,8 +179,8 @@ details.rules summary{cursor:pointer;color:var(--gold);font-weight:700;margin-bo
   </div>
   <div class="box">
     <h2>Online: cada uno en su dispositivo (2, 3 o 4 jugadores)</h2>
-    <p class="rules">⚡ <b>Sala abierta</b>: se crea sin código y aparece en la lista de todos durante 60 segundos. Quien entra a tiempo juega (con el formato y el tiempo que elegiste arriba).</p>
-    <p><button class="b" id="openBtn">⚡ Crear sala abierta (60 s)</button></p>
+    <p class="rules">⚡ <b>Sala abierta</b>: se crea sin código y aparece en la lista de todos durante 15 segundos. Quien entra a tiempo juega (con el formato y el tiempo que elegiste arriba).</p>
+    <p><button class="b" id="openBtn">⚡ Crear sala abierta (15 s)</button></p>
     <h2 style="font-size:1rem">🌐 Salas abiertas ahora</h2>
     <div id="rooms" class="rules">Buscando salas…</div>
     <h2 style="font-size:1rem;margin-top:14px">Sala privada con código</h2>
@@ -222,10 +233,7 @@ details.rules summary{cursor:pointer;color:var(--gold);font-weight:700;margin-bo
   <div class="chatin"><input id="chatIn" maxlength="200" placeholder="Escribí un mensaje…" aria-label="Mensaje" autocomplete="off"><button class="b sm" id="chatSend">Enviar</button></div>
 </div>
 </main>
-<script>
-function loadPeer(){const u=['https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js','https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js'];let i=0;(function n(){if(window.Peer||i>=u.length)return;const e=document.createElement('script');e.src=u[i++];e.async=true;e.onerror=n;document.head.appendChild(e)})()}
-loadPeer();
-</script>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
 // id|nombre|elemento|color|estado|rol|ataque básico|ataque fuerte
 // estado = el nivel que dice la figurita (1, 2, 3). L = legendario / sin evolución conocida.
@@ -469,8 +477,8 @@ const MAP_M = {};
 M.forEach(m => MAP_M[m.id] = m);
 
 const $=id=>document.getElementById(id),rnd=()=>1+Math.floor(Math.random()*6),wait=ms=>new Promise(r=>setTimeout(r,ms));
-const IMG='https://cdn.jsdelivr.net/gh/PokeAPI/sprites@master/sprites/pokemon/other/official-artwork/',IMG2='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/';
-const fig=m=>`<div class="oval"><b>${m.id}</b><img alt="" decoding="async" src="${IMG}${m.id}.png" onload="this.previousElementSibling.remove()" onerror="if(this.dataset.f)this.remove();else{this.dataset.f=1;this.src='${IMG2}${m.id}.png'}"></div>
+const IMG='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/';
+const fig=m=>`<div class="oval"><b>${m.id}</b><img alt="" src="${IMG}${m.id}.png" onload="this.previousElementSibling.remove()" onerror="this.remove()"></div>
 <div class="brand">¡Atrápalos ya!</div>
 <div class="info"><div>ELEMENTO<span>${m.el}</span></div><div>ESTADO · HP<span>${m.st==='L'?'Legendario':m.st} · ${m.hp} HP</span></div><div>ATAQUE (2 piedras)<span>${m.a1} · ${m.b}</span></div><div>ATAQUE FUERTE (4 piedras)<span>${m.a2} · ${m.s}</span></div></div>
 <div class="tag">#${m.id} ${m.n}</div>`;
@@ -496,9 +504,9 @@ const prof=(r,n)=>r[n.toLowerCase()]||(r[n.toLowerCase()]={n,w:0,l:0,adv:0});
    const DB_URL='https://mi-proyecto-default-rtdb.firebaseio.com';
    Vacía = el ranking queda solo en este dispositivo y no hay salas abiertas. */
 const DB_URL='https://duelo-figuritas-default-rtdb.firebaseio.com';
-const DB=/tu-proyecto/.test(DB_URL)?'':DB_URL.replace(/\/+$/,'');
+const DB=DB_URL.replace(/\/+$/,'');
 let clockOff=0,clockOk=false,RK=null,rkBusy=0;
-const dbj=async(m,p,b,q)=>{const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),8000);try{const r=await fetch(DB+'/'+p+'.json'+(q||''),{method:m,body:b===undefined?undefined:JSON.stringify(b),keepalive:m==='DELETE',signal:ac.signal});if(!r.ok)throw new Error(r.status);return await r.json()}finally{clearTimeout(tm)}};
+const dbj=async(m,p,b,q)=>{const r=await fetch(DB+'/'+p+'.json'+(q||''),{method:m,body:b===undefined?undefined:JSON.stringify(b),keepalive:m==='DELETE'});if(!r.ok)throw new Error(r.status);return r.json()};
 const srv=()=>Date.now()+clockOff;
 async function syncClock(){if(!DB)return;try{const t0=Date.now(),v=await dbj('PUT','clock/t',{'.sv':'timestamp'});clockOff=v-(t0+Date.now())/2;clockOk=true}catch(e){}}
 const rkey=n=>encodeURIComponent(n.toLowerCase().replace(/[.$#\[\]\/]/g,'_'));
@@ -540,7 +548,7 @@ function advStep(won){
   if(won){ADV.s++;setBest(ADV.s);if(ADV.s>=BOSS.length){say('🏆 ¡Completaste la aventura!');ADV.lbl='Jugar la aventura de nuevo';ADV.s=0}else{say(`Siguiente rival: ${esc(BOSS[ADV.s])}.`);ADV.lbl='Siguiente combate ▶'}}
   else{setBest(ADV.s);say('Perdiste la aventura. Podés reintentar desde el primer combate.');ADV.lbl='Reintentar aventura';ADV.s=0}
 }
-function show(id){['lobby','pick','reveal','game'].forEach(i=>$(i).classList.toggle('hide',i!==id));$('menuBtn').classList.toggle('hide',id==='lobby');if(id==='lobby'){renderRank();pollRooms()}chatVis()}
+function show(id){['lobby','pick','reveal','game'].forEach(i=>$(i).classList.toggle('hide',i!==id));$('menuBtn').classList.toggle('hide',id==='lobby');if(id==='lobby'){renderRank();pollRooms();warmPeer();startStream();startLC()}else stopLC();chatVis()}
 // Lo que le llega al invitado: sin los datos de las figuritas que todavía no puede ver
 function viewFor(w){
   return{phase,names:NAMES,team:TEAM,
@@ -837,12 +845,12 @@ function renderChat(){
   l.scrollTop=l.scrollHeight;
 }
 function addChat(me,name,text){
-  CHAT.push({me,name,text});CHAT=CHAT.slice(-60);
+  CHAT.push({me,name:cleanTxt(name),text:cleanTxt(text)});CHAT=CHAT.slice(-60);
   if(!me){if(!chatOpen)unread++;play('msg')}
   renderChat();chatVis();
 }
 function sendChat(text){
-  text=String(text||'').trim().slice(0,200);
+  text=cleanTxt(String(text||'').trim().slice(0,200));
   if(!text||!NET.role||(NET.role==='guest'&&!(NET.conn&&NET.conn.open))||Date.now()-lastChat<400)return false;
   lastChat=Date.now();
   if(NET.role==='host')bc({t:'chat',name:NAMES[0],text});else NET.conn.send(JSON.stringify({t:'chat',text}));
@@ -858,8 +866,8 @@ function onGuestMsg(raw){
 
 /* ---- Online (PeerJS) ---- */
 const netMsg=t=>{$('netmsg').textContent=t};
-const needPeer=()=>typeof Peer!=='undefined'||(loadPeer(),netMsg('Cargando la conexión online… probá de nuevo en unos segundos.'),false);
-const cleanName=(v,d)=>String(v||'').trim().slice(0,14)||d;
+const needPeer=()=>typeof Peer!=='undefined'||(netMsg('No se pudo cargar PeerJS. Revisá tu conexión a internet.'),false);
+const cleanName=(v,d)=>cleanTxt(String(v||'').trim().slice(0,14))||d;
 const makeCode=()=>Array.from({length:4},()=>'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random()*32)]).join('');
 const noNet=()=>({role:null,conn:null,conns:[],hi:[],peer:null});
 function bc(o,skip){NET.conns.forEach((c,k)=>{if(k&&k!==skip&&c&&c.open&&NET.hi[k])c.send(JSON.stringify(o))})}
@@ -875,9 +883,118 @@ function applySnap(d){
   else if(phase==='reveal'){if(prev!=='reveal')rvFresh=true;reveal()}
   else if(G){show('game');render()}
 }
-/* ---- Salas abiertas (sin código, 60 s para unirse) ---- */
-const OPEN_MS=60000;
+/* ---- Salas abiertas (sin código, 15 s para unirse) ---- */
+const OPEN_MS=15000,GRACE_MS=6000;
 let PUB=null,JX=null,ROOMS=[],RH='';
+
+/* ---- Conexión precalentada: el invitado ya está registrado en el servidor de PeerJS antes de tocar "Unirme" ---- */
+let WARM=null;
+function warmPeer(){
+  if(WARM||NET.role||typeof Peer==='undefined')return;
+  try{
+    const p=new Peer(),drop=()=>{if(WARM===p)WARM=null;try{p.destroy()}catch(e){}};
+    p.on('error',drop);p.on('disconnected',drop);WARM=p;
+  }catch(e){WARM=null}
+}
+
+/* ---- Lista de salas en tiempo real (streaming de Firebase): sin esperar al sondeo de 2,5 s ---- */
+let ES=null,RM={},lastEs=0,delAsked={};
+const rtSet=(o,s,v)=>{if(!s.length)return v;o=o&&typeof o==='object'?o:{};const h=s[0],x=rtSet(o[h],s.slice(1),v);if(x===null||x===undefined)delete o[h];else o[h]=x;return o};
+function setRooms(o){
+  const now=srv();ROOMS=[];
+  Object.entries(o||{}).forEach(([c,r])=>{
+    if(!r||typeof r.e!=='number')return;
+    if(r.e<now-20000){if(!delAsked[c]){delAsked[c]=1;dbj('DELETE','rooms/'+c).catch(()=>{})}return}
+    ROOMS.push({c,...r});
+  });
+  ROOMS.sort((x,y)=>x.e-y.e);
+  drawRooms();
+}
+function rtEv(type,raw){
+  lastEs=Date.now();
+  let d;try{d=JSON.parse(raw)}catch(e){return}
+  const s=String(d.path||'/').split('/').filter(Boolean);
+  if(type==='put')RM=rtSet(RM,s,d.data)||{};
+  else Object.entries(d.data||{}).forEach(([k,v])=>{RM=rtSet(RM,s.concat(k.split('/').filter(Boolean)),v)||{}});
+  setRooms(RM);
+}
+function startStream(){
+  if(!DB||ES||typeof EventSource==='undefined')return;
+  try{
+    ES=new EventSource(DB+'/rooms.json');
+    ES.addEventListener('put',e=>rtEv('put',e.data));
+    ES.addEventListener('patch',e=>rtEv('patch',e.data));
+    ES.addEventListener('keep-alive',()=>{lastEs=Date.now()});
+    ES.onerror=()=>{if(ES&&ES.readyState===2){ES=null;setTimeout(startStream,3000)}};
+  }catch(e){ES=null}
+}
+const streamOk=()=>ES&&Date.now()-lastEs<45000;
+
+/* ---- Chat general del menú (Firebase, en tiempo real) ---- */
+const CID=Math.random().toString(36).slice(2,10);
+let LES=null,LC={},lcReady=false,lcSeen={},lcLast=0;
+
+/* Filtro de malas palabras: tapa con *** lo que coincide con la lista (ignora tildes, mayúsculas y números tipo p0ta) */
+const LEET={'á':'a','à':'a','ä':'a','é':'e','è':'e','ë':'e','í':'i','ì':'i','ï':'i','ó':'o','ò':'o','ö':'o','ú':'u','ù':'u','ü':'u','ñ':'n','0':'o','1':'i','3':'e','4':'a','5':'s','7':'t','@':'a','$':'s'};
+const fold=t=>t.replace(/[\s\S]/g,c=>{c=c.toLowerCase().charAt(0);return LEET[c]||c});
+const BADRE=/(^|[^a-z])((?:put[oa]+s?|putit[oa]s?|hijoputa|hdp|ctm|mierda+s?|pelotud[oa]+s?|forr[oa]+s?|la\s*concha+s?|conchud[oa]+s?|verga+s?|pij[ao]+s?|trol[oa]+s?|maricon(?:es|a|as)?|mogolic[oa]s?|retrasad[oa]s?|fuck(?:ing|er|ed)?|shit|bitch(?:es)?|cunt|nigg(?:er|a)s?|dick|asshole))(?=[^a-z]|$)/g;
+function cleanTxt(t){
+  t=String(t);const f=fold(t);let o='',last=0,m;
+  BADRE.lastIndex=0;
+  while((m=BADRE.exec(f))){const s=m.index+m[1].length;o+=t.slice(last,s)+'*'.repeat(m[2].length);last=s+m[2].length}
+  return o+t.slice(last);
+}
+/* Silenciar jugadores (solo en tu pantalla) */
+let LM={};try{LM=JSON.parse(localStorage.getItem('lc_mute'))||{}}catch(e){}
+const isM=c=>Object.prototype.hasOwnProperty.call(LM,c),saveLM=()=>{try{localStorage.setItem('lc_mute',JSON.stringify(LM))}catch(e){}};
+function drawMuted(){const ks=Object.keys(LM);$('lcMuted').innerHTML=ks.length?'Silenciados (tocá para mostrar de nuevo): '+ks.map(c=>`<button class="b sm" data-un="${esc(c)}">${esc(LM[c])} ✕</button>`).join(' '):''}
+function drawLC(){
+  const el=$('lcLog');if(!el)return;
+  if(!DB){el.innerHTML='<div class="msg">El chat general necesita la base de datos online (DB_URL).</div>';return}
+  const ks=Object.keys(LC).sort().filter(k=>!(LC[k]&&isM(LC[k].c))).slice(-50),near=el.scrollHeight-el.scrollTop-el.clientHeight<60;
+  el.innerHTML=ks.length?ks.map(k=>{
+    const m=LC[k]&&typeof LC[k]==='object'?LC[k]:{},d=typeof m.ts==='number'?new Date(m.ts):null,
+      hm=d?String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'):'';
+    const nn=cleanTxt(String(m.n||'').slice(0,14)),cc=String(m.c||''),canM=m.c!==CID&&/^[a-z0-9]{1,12}$/.test(cc);
+    return `<div class="msg${m.c===CID?' me':''}"><b>${esc(nn)}${hm?' · '+hm:''}${canM?`<button class="mute" data-c="${cc}" data-n="${esc(nn)}" title="Silenciar a ${esc(nn)}" aria-label="Silenciar a ${esc(nn)}">🚫</button>`:''}</b>${esc(cleanTxt(String(m.t||'').slice(0,200)))}</div>`}).join('')
+    :'<div class="msg">Todavía no hay mensajes. ¡Saludá a los demás jugadores!</div>';
+  if(near||!lcReady)el.scrollTop=el.scrollHeight;
+  let fresh=false;
+  ks.forEach(k=>{if(!lcSeen[k]){lcSeen[k]=1;if(lcReady&&LC[k]&&LC[k].c!==CID&&!isM(LC[k].c))fresh=true}});
+  if(fresh)play('msg');
+}
+function lcEv(type,raw){
+  let d;try{d=JSON.parse(raw)}catch(e){return}
+  const s=String(d.path||'/').split('/').filter(Boolean);
+  if(type==='put')LC=rtSet(LC,s,d.data)||{};
+  else Object.entries(d.data||{}).forEach(([k,v])=>{LC=rtSet(LC,s.concat(k.split('/').filter(Boolean)),v)||{}});
+  drawLC();lcReady=true;
+}
+function startLC(){
+  if(!DB){drawLC();return}
+  if(LES||typeof EventSource==='undefined')return;
+  lcReady=false;lcSeen={};LC={};
+  try{
+    LES=new EventSource(DB+'/lobbychat.json?orderBy='+encodeURIComponent('"$key"')+'&limitToLast=40');
+    LES.addEventListener('put',e=>lcEv('put',e.data));
+    LES.addEventListener('patch',e=>lcEv('patch',e.data));
+    LES.onerror=()=>{if(LES&&LES.readyState===2){LES=null;setTimeout(()=>{if(phase==='lobby')startLC()},3000)}};
+  }catch(e){LES=null}
+}
+function stopLC(){if(LES){try{LES.close()}catch(e){}LES=null}}
+async function sendLC(){
+  const inp=$('lcIn'),t=cleanTxt(inp.value.trim().slice(0,200));
+  if(!t||!DB||Date.now()-lcLast<1200)return;
+  lcLast=Date.now();inp.value='';$('lcMsg').textContent='';
+  try{await dbj('POST','lobbychat',{n:cleanName($('myname').value,'Invitado'),t,c:CID,ts:{'.sv':'timestamp'}})}
+  catch(e){inp.value=t;$('lcMsg').textContent='No se pudo enviar. Revisá tu conexión.'}
+}
+$('lcSend').onclick=sendLC;
+$('lcIn').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();sendLC()}};
+$('lcQuick').onclick=e=>{const q=e.target.closest('[data-q]');if(q){$('lcIn').value=q.dataset.q;sendLC()}};
+$('lcLog').onclick=e=>{const b=e.target.closest('.mute');if(b){LM[b.dataset.c]=b.dataset.n||'Jugador';saveLM();drawLC();drawMuted()}};
+$('lcMuted').onclick=e=>{const b=e.target.closest('[data-un]');if(b){delete LM[b.dataset.un];saveLM();drawLC();drawMuted()}};
+drawMuted();
 function stopPub(del=true){
   if(!PUB)return;
   clearInterval(PUB.timer);const c=PUB.code;PUB=null;
@@ -897,7 +1014,7 @@ function startOpen(){
   if(!ok.length){
     if(NET.peer)try{NET.peer.destroy()}catch(e){}
     NET=noNet();ME=null;
-    netMsg('Nadie se unió en 60 segundos. Podés crear otra sala abierta o jugar contra la compu.');return;
+    netMsg('Nadie se unió en 15 segundos. Podés crear otra sala abierta o jugar contra la compu.');return;
   }
   const conns=[NET.conns[0]],names=[NAMES[0]];
   ok.forEach(k=>{conns.push(NET.conns[k]);names.push(NAMES[k])});
@@ -921,7 +1038,10 @@ function onHostMsg(raw,k){
   if(d.t==='hello'){
     if(NET.hi[k])return;
     NAMES[k]=cleanName(d.name,'Jugador '+(k+1));NET.hi[k]=true;NET.conns[k].send(JSON.stringify({t:'seat',k}));
-    if(NET.conns.slice(1).every((c,j)=>NET.hi[j+1])){stopPub();newPick()}else{roomMsg();pubJ()}
+    if(NET.conns.slice(1).every((c,j)=>NET.hi[j+1])){stopPub();newPick()}else{
+      // Ya entró alguien: el resto tiene solo GRACE_MS más, en vez de esperar los 15 s completos
+      if(PUB){const ne=srv()+GRACE_MS;if(PUB.exp>ne){PUB.exp=ne;dbj('PATCH','rooms/'+PUB.code,{e:ne}).catch(()=>{})}}
+      roomMsg();pubJ()}
   }
   else if(!NET.hi[k])return;
   else if(d.t==='chat'){const t=String(d.text||'').slice(0,200);addChat(false,NAMES[k],t);bc({t:'chat',name:NAMES[k],text:t},k)}
@@ -965,31 +1085,26 @@ function joinRoom(code,room){
   if(code.length!==4){netMsg('Escribí el código de 4 letras que te pasó tu rival.');return}
   stopPub();
   if(NET.peer)try{NET.peer.destroy()}catch(e){}
-  const name=cleanName($('myname').value,'Jugador 2'),peer=new Peer();
+  const name=cleanName($('myname').value,'Jugador 2');
+  let peer;
+  if(WARM&&!WARM.destroyed&&!WARM.disconnected){peer=WARM;WARM=null;peer.removeAllListeners('error');peer.removeAllListeners('disconnected')}
+  else peer=new Peer();
   NET=noNet();NET.role='guest';NET.peer=peer;ME=null;BOT=false;resetChat();
   JX=room?{e:room.e,h:room.h,ok:false}:null;
   netMsg('Conectando…');
-  peer.on('open',()=>{
+  const go=()=>{
     const c=peer.connect('duelofig-'+code,{reliable:true});NET.conn=c;
     c.on('open',()=>{c.send(JSON.stringify({t:'hello',name}));if(JX)JX.ok=true;netMsg('Conectado. Esperando que arranque la partida…')});
     c.on('data',onGuestMsg);
     c.on('close',lost);c.on('error',lost);
     setTimeout(()=>{if(NET.conn===c&&!c.open)netMsg('Tarda en conectar. Revisá el código o probá de nuevo.')},15000);
-  });
+  };
+  if(peer.open)go();else peer.on('open',go);
   peer.on('error',e=>netMsg(e.type==='peer-unavailable'?'No encontré esa sala. Puede que ya haya arrancado o se haya cerrado.':'No se pudo conectar ('+e.type+').'));
 }
 async function pollRooms(){
-  if(!DB||phase!=='lobby'||document.hidden)return;
-  try{
-    const o=await dbj('GET','rooms'),now=srv();ROOMS=[];
-    Object.entries(o||{}).forEach(([c,r])=>{
-      if(!r||typeof r.e!=='number')return;
-      if(r.e<now-20000){dbj('DELETE','rooms/'+c).catch(()=>{});return}
-      ROOMS.push({c,...r});
-    });
-    ROOMS.sort((x,y)=>x.e-y.e);
-  }catch(e){ROOMS=null}
-  drawRooms();
+  if(!DB||phase!=='lobby'||document.hidden||streamOk())return;
+  try{RM=await dbj('GET','rooms')||{};setRooms(RM)}catch(e){ROOMS=null;drawRooms()}
 }
 function drawRooms(){
   const el=$('rooms');let h;
@@ -1037,6 +1152,7 @@ syncClock();
 setInterval(tickAll,500);setInterval(pollRooms,2500);setInterval(()=>{if(phase==='lobby'&&!document.hidden)renderRank()},20000);
 addEventListener('pagehide',()=>{if(PUB&&DB)try{fetch(DB+'/rooms/'+PUB.code+'.json',{method:'DELETE',keepalive:true})}catch(e){}});
 show('lobby');
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&phase==='lobby'){warmPeer();startStream();pollRooms()}});
 </script>
 </body>
 </html>
