@@ -139,6 +139,7 @@ details.rules summary{cursor:pointer;color:var(--gold);font-weight:700;margin-bo
 <body>
 <main>
 <header class="top"><h1>Duelo de Figuritas</h1>
+<button class="b sm hide" id="menuBtn">⬅ Menú</button>
 <button class="b sm hide" id="chatTog" aria-expanded="false">💬 Chat<span class="badge hide" id="chatBadge">0</span></button>
 <button class="b sm" id="muteBtn" aria-label="Silenciar sonidos">🔊</button></header>
 
@@ -496,7 +497,7 @@ function advStep(won){
   if(won){ADV.s++;setBest(ADV.s);if(ADV.s>=BOSS.length){say('🏆 ¡Completaste la aventura!');ADV.lbl='Jugar la aventura de nuevo';ADV.s=0}else{say(`Siguiente rival: ${esc(BOSS[ADV.s])}.`);ADV.lbl='Siguiente combate ▶'}}
   else{setBest(ADV.s);say('Perdiste la aventura. Podés reintentar desde el primer combate.');ADV.lbl='Reintentar aventura';ADV.s=0}
 }
-function show(id){['lobby','pick','reveal','game'].forEach(i=>$(i).classList.toggle('hide',i!==id));if(id==='lobby')renderRank();chatVis()}
+function show(id){['lobby','pick','reveal','game'].forEach(i=>$(i).classList.toggle('hide',i!==id));$('menuBtn').classList.toggle('hide',id==='lobby');if(id==='lobby')renderRank();chatVis()}
 // Lo que le llega al invitado: sin los datos de las figuritas que todavía no puede ver
 function viewFor(w){
   return{phase,names:NAMES,team:TEAM,
@@ -617,7 +618,7 @@ function render(){
   if(G.hitN!==lastHit){lastHit=G.hitN;if(G.hitN){const b=$('s'+G.hitK);b.classList.add('hit');setTimeout(()=>b.classList.remove('hit'),600)}}
   if(G.evN<lastEv)lastEv=0;
   (G.fx||[]).forEach(e=>{if(e.i>lastEv){lastEv=e.i;play(e.t)}});
-  if(G.over&&recDone!==G.gid){recDone=G.gid;recordResult();if(ADV&&ME===0)advStep(G.winners.includes(0))}
+  if(G.over&&phase==='game'&&recDone!==G.gid){recDone=G.gid;recordResult();if(ADV&&ME===0)advStep(G.winners.includes(0))}
   $('again').textContent=(ADV&&ADV.lbl)||'Nueva partida';$('again').classList.toggle('hide',!G.over);
   $('log').innerHTML=G.log.slice(0,3).map(x=>`<div>${x}</div>`).join('');
   tick();
@@ -887,6 +888,12 @@ $('advBtn').onclick=()=>{if(NET.peer)try{NET.peer.destroy()}catch(e){}NET=noNet(
 $('rankReset').onclick=()=>{if(confirm('¿Borrar todo el ranking de este dispositivo?')){saveRank({});renderRank()}};
 $('myname').oninput=e=>{try{localStorage.setItem('duelo_name',e.target.value.trim())}catch(x){}};
 try{$('myname').value=localStorage.getItem('duelo_name')||''}catch(e){}
+$('menuBtn').onclick=()=>{
+  const busy=phase!=='lobby'&&!(phase==='game'&&G&&G.over);
+  if(busy&&!confirm(NET.role?'¿Salir al menú? Se cierra la partida para todos los jugadores.':'¿Volver al menú? Se pierde la partida en curso.'))return;
+  if(NET.peer)try{NET.peer.destroy()}catch(e){}
+  NET=noNet();ME=null;BOT=false;ADV=null;botPending=false;phase='lobby';resetChat();show('lobby');netMsg('');
+};
 $('chatTog').onclick=()=>{chatOpen=!chatOpen;if(chatOpen)unread=0;renderChat();chatVis()};
 $('chatSend').onclick=()=>{if(sendChat($('chatIn').value))$('chatIn').value=''};
 $('chatIn').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('chatSend').click()}};
