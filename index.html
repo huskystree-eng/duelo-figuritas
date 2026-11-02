@@ -153,7 +153,8 @@ details.rules summary{cursor:pointer;color:var(--gold);font-weight:700;margin-bo
   </div>
   <div class="box">
     <h2>💬 Chat general</h2>
-    <p class="rules">Sala abierta para todos los que están en el menú. Se ve con el nombre que escribiste arriba. Sé respetuoso.</p>
+    <p class="rules">Sala abierta para todos los que están en el menú. Se ve con el nombre que escribiste arriba. Sé respetuoso: las malas palabras se tapan y quien rompa las reglas puede ser bloqueado por su ID.</p>
+    <p class="rules">Tu ID de jugador: <b id="myPid"></b></p>
     <div class="chatlog lobbylog" id="lcLog" role="log" aria-live="polite"><div class="msg">Conectando al chat…</div></div>
     <div class="quick" id="lcQuick" style="margin:6px 0"><button data-q="👋 ¡Hola!" aria-label="Saludar">👋</button><button data-q="¿Alguien juega?" aria-label="Preguntar si alguien juega">🎮</button><button data-q="😂" aria-label="Enviar risa">😂</button><button data-q="¡Buena partida!" aria-label="Buena partida">👏</button><button data-q="🔥" aria-label="Enviar fuego">🔥</button></div>
     <div class="chatin"><input id="lcIn" maxlength="200" placeholder="Escribí un mensaje…" aria-label="Mensaje al chat general" autocomplete="off"><button class="b sm" id="lcSend">Enviar</button></div>
@@ -483,6 +484,44 @@ const cls=m=>'fig '+m.cl;
 let P,G=null,phase='lobby',ME=null,NET={role:null,conn:null,conns:[],hi:[],peer:null},N=2,TEAM=false,TG=-1,lastRoll=-1,lastHit=-1,lastEv=0,rvPeek=false,rvFresh=false,peekK=null,BOT=false,botPending=false,lastTickLeft=-1;
 const shuffle=a=>{a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
 const esc=t=>String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/* ---- ID fijo del jugador + filtro de malas palabras ---- */
+const PID=(()=>{
+  try{let v=localStorage.getItem('duelo_pid');
+    if(!/^[a-z0-9]{8}$/.test(v||'')){v=Array.from({length:8},()=>'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random()*36)]).join('');localStorage.setItem('duelo_pid',v)}
+    return v}catch(e){return Math.random().toString(36).slice(2,10).padEnd(8,'0')}
+})();
+let BANS={};
+/* Palabras prohibidas (editá a gusto). Se compara palabra por palabra, sin tildes, con letras repetidas
+   y cambios tipo p0t4 / m13rd4. Agregá o sacá palabras de estas listas. */
+const BAD_WORDS=['puta','puto','putas','putos','putita','putito','mierda','pelotudo','pelotuda','pelotudos','forro','forra','forros','concha','conchas','conchuda','conchudo','culo','culos','verga','pija','pijas','pete','teta','tetas','coger','cogida','garchar','garche','garcha','culiar','culiado','culiada','conchetumare','conchesumadre','ortiba','sorete','garca','trolo','trola','marica','maricon','mogolico','mongolico','retrasado','retrasada','cabron','cabrona','zorra','gilipollas','chupala','chupame','hdp','ctm','lpm','nazi','violar','violador','suicidate','matate','porno','porn','fuck','fucking','shit','bitch','asshole','dick','cunt','nigger','nigga','faggot','retard','rape','whore','slut'];
+const BAD_STEMS=['pelotud','conchud','mierd','hijodep','putaz','putear','puteada','chupapij','chupaverg','forrazo'];
+const _norm=t=>String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+  .replace(/[013457@$]/g,c=>({'0':'o','1':'i','3':'e','4':'a','5':'s','7':'t','@':'a','$':'s'}[c]))
+  .replace(/([a-z])\1{2,}/g,'$1').replace(/([aeiou])\1+/g,'$1');
+const BADSET=new Set(BAD_WORDS.map(_norm));
+function _bad(tok){
+  const w=_norm(tok);
+  if(BADSET.has(w))return true;
+  if(w.length>3&&w.endsWith('s')&&BADSET.has(w.slice(0,-1)))return true;
+  return BAD_STEMS.some(x=>w.startsWith(x));
+}
+/* Devuelve el texto con las palabras prohibidas tapadas con ***** */
+function cleanText(t){
+  t=String(t);
+  const re=/[\p{L}\p{N}@$]+/gu,toks=[];let m;
+  while((m=re.exec(t)))toks.push({s:m.index,e:m.index+m[0].length,w:m[0]});
+  const mask=toks.map(k=>_bad(k.w));
+  for(let i=0;i<toks.length;){ // letras separadas: "p u t a", "p.u.t.a"
+    let j=i;
+    while(j+1<toks.length&&toks[j].w.length===1&&toks[j+1].w.length===1&&toks[j+1].s-toks[j].e===1)j++;
+    if(j-i>=2&&_bad(toks.slice(i,j+1).map(k=>k.w).join('')))for(let q=i;q<=j;q++)mask[q]=true;
+    i=j+1;
+  }
+  let o='',p=0;
+  toks.forEach((k,i)=>{if(mask[i]){o+=t.slice(p,k.s)+'*'.repeat(k.w.length);p=k.e}});
+  return o+t.slice(p);
+}
+
 const NAMES=['Jugador 1','Jugador 2'];
 const nm=k=>esc(NAMES[k]),took=k=>P.pool.filter(c=>c.o===k).length;
 const nextPick=()=>{for(let k=0;k<N;k++)if(took(k)<2)return k;return 0};
@@ -505,6 +544,7 @@ const DB=DB_URL.replace(/\/+$/,'');
 let clockOff=0,clockOk=false,RK=null,rkBusy=0;
 const dbj=async(m,p,b,q)=>{const r=await fetch(DB+'/'+p+'.json'+(q||''),{method:m,body:b===undefined?undefined:JSON.stringify(b),keepalive:m==='DELETE'});if(!r.ok)throw new Error(r.status);return r.json()};
 const srv=()=>Date.now()+clockOff;
+async function loadBans(){if(!DB)return;try{const o=await dbj('GET','bans');BANS=o&&typeof o==='object'?o:{};drawRank();drawRooms()}catch(e){}}
 async function syncClock(){if(!DB)return;try{const t0=Date.now(),v=await dbj('PUT','clock/t',{'.sv':'timestamp'});clockOff=v-(t0+Date.now())/2;clockOk=true}catch(e){}}
 const rkey=n=>encodeURIComponent(n.toLowerCase().replace(/[.$#\[\]\/]/g,'_'));
 async function loadRemote(){
@@ -513,26 +553,26 @@ async function loadRemote(){
     let o;
     try{o=await dbj('GET','ranking',undefined,'?orderBy='+encodeURIComponent('"w"')+'&limitToLast=40')}
     catch(e){o=await dbj('GET','ranking')}
-    RK=Object.values(o||{}).filter(p=>p&&p.n)
+    RK=Object.values(o||{}).filter(p=>p&&p.n&&!BANS[p.i])
   }catch(e){RK=null}
   return RK;
 }
 function drawRank(){
   const a=(RK||Object.values(loadRank())).slice().sort((x,y)=>(y.w||0)-(x.w||0)||(x.l||0)-(y.l||0)),med=['🥇','🥈','🥉'];
   const note=!DB?'<div>⚠ Ranking global sin configurar: se muestra solo el de este dispositivo.</div>':RK?'':'<div>⚠ No se pudo conectar al ranking global: se muestra el de este dispositivo.</div>';
-  $('rank').innerHTML=(a.length?a.slice(0,10).map((p,i)=>`<div>${med[i]||(i+1)+'.'} <b>${esc(p.n)}</b> · ${p.w||0} victorias · ${p.l||0} derrotas${p.adv?` · 🗺 aventura ${p.adv}/${BOSS.length}`:''}</div>`).join(''):'Todavía no hay partidas registradas.')+note;
-  $('known').innerHTML=a.map(p=>`<option value="${esc(p.n)}">`).join('');
+  $('rank').innerHTML=(a.length?a.slice(0,10).map((p,i)=>`<div>${med[i]||(i+1)+'.'} <b>${esc(cleanText(p.n))}</b> · ${p.w||0} victorias · ${p.l||0} derrotas${p.adv?` · 🗺 aventura ${p.adv}/${BOSS.length}`:''}</div>`).join(''):'Todavía no hay partidas registradas.')+note;
+  $('known').innerHTML=a.map(p=>`<option value="${esc(cleanText(p.n))}">`).join('');
 }
 function renderRank(force){drawRank();if(DB&&(force||Date.now()-rkBusy>3000)){rkBusy=Date.now();loadRemote().then(drawRank)}}
 async function pushRank(n,won){
-  if(!DB)return;
-  try{await dbj('PATCH','ranking/'+rkey(n),{n,w:{'.sv':{increment:won?1:0}},l:{'.sv':{increment:won?0:1}}});renderRank(true)}catch(e){}
+  if(!DB||BANS[PID]||cleanText(n)!==n)return;
+  try{await dbj('PATCH','ranking/'+rkey(n),{n,i:PID,w:{'.sv':{increment:won?1:0}},l:{'.sv':{increment:won?0:1}}});renderRank(true)}catch(e){}
 }
 async function pushBest(n,name){
-  if(!DB)return;
+  if(!DB||BANS[PID]||cleanText(name)!==name)return;
   try{
     const cur=await dbj('GET','ranking/'+rkey(name)+'/adv');
-    if(n>(cur||0)){await dbj('PATCH','ranking/'+rkey(name),{n:name,adv:n,w:{'.sv':{increment:0}},l:{'.sv':{increment:0}}});renderRank(true)}
+    if(n>(cur||0)){await dbj('PATCH','ranking/'+rkey(name),{n:name,i:PID,adv:n,w:{'.sv':{increment:0}},l:{'.sv':{increment:0}}});renderRank(true)}
   }catch(e){}
 }
 function recordResult(){
@@ -842,12 +882,13 @@ function renderChat(){
   l.scrollTop=l.scrollHeight;
 }
 function addChat(me,name,text){
+  name=cleanText(name);text=cleanText(text);
   CHAT.push({me,name,text});CHAT=CHAT.slice(-60);
   if(!me){if(!chatOpen)unread++;play('msg')}
   renderChat();chatVis();
 }
 function sendChat(text){
-  text=String(text||'').trim().slice(0,200);
+  text=cleanText(String(text||'').trim().slice(0,200));
   if(!text||!NET.role||(NET.role==='guest'&&!(NET.conn&&NET.conn.open))||Date.now()-lastChat<400)return false;
   lastChat=Date.now();
   if(NET.role==='host')bc({t:'chat',name:NAMES[0],text});else NET.conn.send(JSON.stringify({t:'chat',text}));
@@ -857,6 +898,7 @@ function resetChat(){CHAT=[];unread=0;renderChat();chatVis()}
 function onGuestMsg(raw){
   let d;try{d=JSON.parse(raw)}catch(e){return}
   if(d.t==='chat')addChat(false,String(d.name||'').slice(0,14),String(d.text||'').slice(0,200));
+  else if(d.t==='ban')setTimeout(()=>netMsg('Tu ID está suspendido: no podés jugar online.'),700);
   else if(d.t==='seat')ME=+d.k;
   else if(d.t==='s'){try{applySnap(d)}catch(e){}}
 }
@@ -864,7 +906,7 @@ function onGuestMsg(raw){
 /* ---- Online (PeerJS) ---- */
 const netMsg=t=>{$('netmsg').textContent=t};
 const needPeer=()=>typeof Peer!=='undefined'||(netMsg('No se pudo cargar PeerJS. Revisá tu conexión a internet.'),false);
-const cleanName=(v,d)=>String(v||'').trim().slice(0,14)||d;
+const cleanName=(v,d)=>{const n=String(v||'').trim().slice(0,14);return n&&cleanText(n)===n?n:d};
 const makeCode=()=>Array.from({length:4},()=>'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random()*32)]).join('');
 const noNet=()=>({role:null,conn:null,conns:[],hi:[],peer:null});
 function bc(o,skip){NET.conns.forEach((c,k)=>{if(k&&k!==skip&&c&&c.open&&NET.hi[k])c.send(JSON.stringify(o))})}
@@ -902,6 +944,7 @@ function setRooms(o){
   Object.entries(o||{}).forEach(([c,r])=>{
     if(!r||typeof r.e!=='number')return;
     if(r.e<now-20000){if(!delAsked[c]){delAsked[c]=1;dbj('DELETE','rooms/'+c).catch(()=>{})}return}
+    if(BANS[r.i])return;
     ROOMS.push({c,...r});
   });
   ROOMS.sort((x,y)=>x.e-y.e);
@@ -928,16 +971,16 @@ function startStream(){
 const streamOk=()=>ES&&Date.now()-lastEs<45000;
 
 /* ---- Chat general del menú (Firebase, en tiempo real) ---- */
-const CID=Math.random().toString(36).slice(2,10);
+const CID=PID;
 let LES=null,LC={},lcReady=false,lcSeen={},lcLast=0;
 function drawLC(){
   const el=$('lcLog');if(!el)return;
   if(!DB){el.innerHTML='<div class="msg">El chat general necesita la base de datos online (DB_URL).</div>';return}
-  const ks=Object.keys(LC).sort().slice(-50),near=el.scrollHeight-el.scrollTop-el.clientHeight<60;
+  const ks=Object.keys(LC).filter(k=>!(LC[k]&&BANS[LC[k].c])).sort().slice(-50),near=el.scrollHeight-el.scrollTop-el.clientHeight<60;
   el.innerHTML=ks.length?ks.map(k=>{
     const m=LC[k]&&typeof LC[k]==='object'?LC[k]:{},d=typeof m.ts==='number'?new Date(m.ts):null,
       hm=d?String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'):'';
-    return `<div class="msg${m.c===CID?' me':''}"><b>${esc(String(m.n||'').slice(0,14))}${hm?' · '+hm:''}</b>${esc(String(m.t||'').slice(0,200))}</div>`}).join('')
+    return `<div class="msg${m.c===CID?' me':''}"><b>${esc(cleanText(String(m.n||'').slice(0,14)))}${hm?' · '+hm:''} · #${esc(String(m.c||'').slice(0,8))}</b>${esc(cleanText(String(m.t||'').slice(0,200)))}</div>`}).join('')
     :'<div class="msg">Todavía no hay mensajes. ¡Saludá a los demás jugadores!</div>';
   if(near||!lcReady)el.scrollTop=el.scrollHeight;
   let fresh=false;
@@ -964,11 +1007,12 @@ function startLC(){
 }
 function stopLC(){if(LES){try{LES.close()}catch(e){}LES=null}}
 async function sendLC(){
-  const inp=$('lcIn'),t=inp.value.trim().slice(0,200);
+  const inp=$('lcIn'),raw=inp.value.trim().slice(0,200),t=cleanText(raw);
   if(!t||!DB||Date.now()-lcLast<1200)return;
-  lcLast=Date.now();inp.value='';$('lcMsg').textContent='';
+  if(BANS[PID]){$('lcMsg').textContent='Tu ID está suspendido del chat.';return}
+  lcLast=Date.now();inp.value='';$('lcMsg').textContent=t!==raw?'Se ocultaron palabras no permitidas.':'';
   try{await dbj('POST','lobbychat',{n:cleanName($('myname').value,'Invitado'),t,c:CID,ts:{'.sv':'timestamp'}})}
-  catch(e){inp.value=t;$('lcMsg').textContent='No se pudo enviar. Revisá tu conexión.'}
+  catch(e){inp.value=raw;$('lcMsg').textContent='No se pudo enviar. Revisá tu conexión.'}
 }
 $('lcSend').onclick=sendLC;
 $('lcIn').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();sendLC()}};
@@ -1015,6 +1059,7 @@ function onHostMsg(raw,k){
   let d;try{d=JSON.parse(raw)}catch(e){return}
   if(d.t==='hello'){
     if(NET.hi[k])return;
+    if(BANS[String(d.pid||'')]){const cc=NET.conns[k];try{cc.send(JSON.stringify({t:'ban'}))}catch(e){}setTimeout(()=>{try{cc.close()}catch(e){}},250);return}
     NAMES[k]=cleanName(d.name,'Jugador '+(k+1));NET.hi[k]=true;NET.conns[k].send(JSON.stringify({t:'seat',k}));
     if(NET.conns.slice(1).every((c,j)=>NET.hi[j+1])){stopPub();newPick()}else{
       // Ya entró alguien: el resto tiene solo GRACE_MS más, en vez de esperar los 15 s completos
@@ -1027,6 +1072,7 @@ function onHostMsg(raw,k){
 }
 function hostRoom(open){
   if(!needPeer())return;
+  if(BANS[PID]){netMsg('Tu ID está suspendido: no podés jugar online.');return}
   if(open!==true)open=false;
   stopPub();
   if(NET.peer)try{NET.peer.destroy()}catch(e){}
@@ -1039,7 +1085,7 @@ function hostRoom(open){
     if(!clockOk)await syncClock();
     if(NET.peer!==peer)return;
     const exp=srv()+OPEN_MS;
-    try{await dbj('PUT','rooms/'+code,{h:NAMES[0],n:N,j:1,e:exp,tm:TEAM?1:0})}
+    try{await dbj('PUT','rooms/'+code,{h:NAMES[0],n:N,j:1,e:exp,tm:TEAM?1:0,i:PID})}
     catch(e){netMsg('No se pudo publicar la sala abierta. Revisá tu conexión o usá una sala con código.');return}
     if(NET.peer!==peer){dbj('DELETE','rooms/'+code).catch(()=>{});return}
     PUB={code,exp,timer:setInterval(tickPub,250)};roomMsg();pollRooms();
@@ -1059,6 +1105,7 @@ function openRoom(){
 }
 function joinRoom(code,room){
   if(!needPeer())return;
+  if(BANS[PID]){netMsg('Tu ID está suspendido: no podés jugar online.');return}
   code=String(typeof code==='string'?code:$('code').value).trim().toUpperCase();
   if(code.length!==4){netMsg('Escribí el código de 4 letras que te pasó tu rival.');return}
   stopPub();
@@ -1072,7 +1119,7 @@ function joinRoom(code,room){
   netMsg('Conectando…');
   const go=()=>{
     const c=peer.connect('duelofig-'+code,{reliable:true});NET.conn=c;
-    c.on('open',()=>{c.send(JSON.stringify({t:'hello',name}));if(JX)JX.ok=true;netMsg('Conectado. Esperando que arranque la partida…')});
+    c.on('open',()=>{c.send(JSON.stringify({t:'hello',name,pid:PID}));if(JX)JX.ok=true;netMsg('Conectado. Esperando que arranque la partida…')});
     c.on('data',onGuestMsg);
     c.on('close',lost);c.on('error',lost);
     setTimeout(()=>{if(NET.conn===c&&!c.open)netMsg('Tarda en conectar. Revisá el código o probá de nuevo.')},15000);
@@ -1090,7 +1137,7 @@ function drawRooms(){
   else if(ROOMS===null)h='No se pudo cargar la lista de salas. Se reintenta sola.';
   else{
     const now=srv(),l=ROOMS.filter(r=>r.e>now&&!(PUB&&PUB.code===r.c));
-    h=l.length?l.map(r=>`<div>🌐 <b>${esc(r.h)}</b> · ${+r.j||1}/${+r.n||2} jugadores${r.tm?' (equipos)':''} · ⏱ <span data-e="${+r.e}"></span> s ${(+r.j||1)<(+r.n||2)?`<button class="b sm" data-join="${esc(r.c)}">Unirme</button>`:'(llena)'}</div>`).join(''):'No hay salas abiertas ahora. Creá una y esperá a que se sumen.';
+    h=l.length?l.map(r=>`<div>🌐 <b>${esc(cleanText(r.h))}</b> · ${+r.j||1}/${+r.n||2} jugadores${r.tm?' (equipos)':''} · ⏱ <span data-e="${+r.e}"></span> s ${(+r.j||1)<(+r.n||2)?`<button class="b sm" data-join="${esc(r.c)}">Unirme</button>`:'(llena)'}</div>`).join(''):'No hay salas abiertas ahora. Creá una y esperá a que se sumen.';
   }
   if(h!==RH){RH=h;el.innerHTML=h}
   el.querySelectorAll('[data-e]').forEach(x=>{x.textContent=Math.max(0,Math.ceil((+x.dataset.e-srv())/1000))});
@@ -1126,7 +1173,8 @@ renderChat();
 const updMute=()=>{$('muteBtn').textContent=MUTE?'🔇':'🔊';$('muteBtn').setAttribute('aria-label',MUTE?'Activar sonidos':'Silenciar sonidos')};
 $('muteBtn').onclick=()=>{MUTE=!MUTE;try{localStorage.setItem('mute',MUTE?'1':'0')}catch(e){}updMute();if(!MUTE)play('pick')};
 updMute();
-syncClock();
+$('myPid').textContent='#'+PID;
+syncClock();loadBans();setInterval(loadBans,60000);
 setInterval(tickAll,500);setInterval(pollRooms,2500);setInterval(()=>{if(phase==='lobby'&&!document.hidden)renderRank()},20000);
 addEventListener('pagehide',()=>{if(PUB&&DB)try{fetch(DB+'/rooms/'+PUB.code+'.json',{method:'DELETE',keepalive:true})}catch(e){}});
 show('lobby');
