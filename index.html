@@ -491,8 +491,8 @@ const prof=(r,n)=>r[n.toLowerCase()]||(r[n.toLowerCase()]={n,w:0,l:0,adv:0});
    Pegá acá la URL de tu base, sin barra final. Ejemplo:
    const DB_URL='https://tu-proyecto-default-rtdb.firebaseio.com';
    Vacía = el ranking queda solo en este dispositivo y no hay salas abiertas. */
-const DB_URL='';
-const DB=DB_URL.replace(/\/+$/,'');
+const DB_URL='https://tu-proyecto-default-rtdb.firebaseio.com';
+const DB=DB_URL.replace(/\/+$/,'https://tu-proyecto-default-rtdb.firebaseio.com');
 let clockOff=0,clockOk=false,RK=null,rkBusy=0;
 const dbj=async(m,p,b,q)=>{const r=await fetch(DB+'/'+p+'.json'+(q||''),{method:m,body:b===undefined?undefined:JSON.stringify(b),keepalive:m==='DELETE'});if(!r.ok)throw new Error(r.status);return r.json()};
 const srv=()=>Date.now()+clockOff;
