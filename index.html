@@ -135,8 +135,6 @@ details.rules summary{cursor:pointer;color:var(--gold);font-weight:700;margin-bo
 #sides .side:last-child:nth-child(odd){grid-column:1/-1}
 .side.tgt{outline:3px dashed #ff5a3c}.side.dead{opacity:.4}
 .lobbylog{flex:none;height:220px;background:#0004;border-radius:8px;padding:6px}
-.msg .mute{background:none;border:0;cursor:pointer;font-size:.8rem;padding:0 0 0 6px;opacity:.6}
-.msg .mute:hover,.msg .mute:focus-visible{opacity:1}
 </style>
 </head>
 <body>
@@ -160,7 +158,6 @@ details.rules summary{cursor:pointer;color:var(--gold);font-weight:700;margin-bo
     <div class="quick" id="lcQuick" style="margin:6px 0"><button data-q="👋 ¡Hola!" aria-label="Saludar">👋</button><button data-q="¿Alguien juega?" aria-label="Preguntar si alguien juega">🎮</button><button data-q="😂" aria-label="Enviar risa">😂</button><button data-q="¡Buena partida!" aria-label="Buena partida">👏</button><button data-q="🔥" aria-label="Enviar fuego">🔥</button></div>
     <div class="chatin"><input id="lcIn" maxlength="200" placeholder="Escribí un mensaje…" aria-label="Mensaje al chat general" autocomplete="off"><button class="b sm" id="lcSend">Enviar</button></div>
     <p class="rules" id="lcMsg" aria-live="polite"></p>
-    <p class="rules" id="lcMuted"></p>
   </div>
   <div class="box">
     <h2>Contra la compu</h2>
@@ -845,12 +842,12 @@ function renderChat(){
   l.scrollTop=l.scrollHeight;
 }
 function addChat(me,name,text){
-  CHAT.push({me,name:cleanTxt(name),text:cleanTxt(text)});CHAT=CHAT.slice(-60);
+  CHAT.push({me,name,text});CHAT=CHAT.slice(-60);
   if(!me){if(!chatOpen)unread++;play('msg')}
   renderChat();chatVis();
 }
 function sendChat(text){
-  text=cleanTxt(String(text||'').trim().slice(0,200));
+  text=String(text||'').trim().slice(0,200);
   if(!text||!NET.role||(NET.role==='guest'&&!(NET.conn&&NET.conn.open))||Date.now()-lastChat<400)return false;
   lastChat=Date.now();
   if(NET.role==='host')bc({t:'chat',name:NAMES[0],text});else NET.conn.send(JSON.stringify({t:'chat',text}));
@@ -867,7 +864,7 @@ function onGuestMsg(raw){
 /* ---- Online (PeerJS) ---- */
 const netMsg=t=>{$('netmsg').textContent=t};
 const needPeer=()=>typeof Peer!=='undefined'||(netMsg('No se pudo cargar PeerJS. Revisá tu conexión a internet.'),false);
-const cleanName=(v,d)=>cleanTxt(String(v||'').trim().slice(0,14))||d;
+const cleanName=(v,d)=>String(v||'').trim().slice(0,14)||d;
 const makeCode=()=>Array.from({length:4},()=>'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random()*32)]).join('');
 const noNet=()=>({role:null,conn:null,conns:[],hi:[],peer:null});
 function bc(o,skip){NET.conns.forEach((c,k)=>{if(k&&k!==skip&&c&&c.open&&NET.hi[k])c.send(JSON.stringify(o))})}
@@ -933,34 +930,18 @@ const streamOk=()=>ES&&Date.now()-lastEs<45000;
 /* ---- Chat general del menú (Firebase, en tiempo real) ---- */
 const CID=Math.random().toString(36).slice(2,10);
 let LES=null,LC={},lcReady=false,lcSeen={},lcLast=0;
-
-/* Filtro de malas palabras: tapa con *** lo que coincide con la lista (ignora tildes, mayúsculas y números tipo p0ta) */
-const LEET={'á':'a','à':'a','ä':'a','é':'e','è':'e','ë':'e','í':'i','ì':'i','ï':'i','ó':'o','ò':'o','ö':'o','ú':'u','ù':'u','ü':'u','ñ':'n','0':'o','1':'i','3':'e','4':'a','5':'s','7':'t','@':'a','$':'s'};
-const fold=t=>t.replace(/[\s\S]/g,c=>{c=c.toLowerCase().charAt(0);return LEET[c]||c});
-const BADRE=/(^|[^a-z])((?:put[oa]+s?|putit[oa]s?|hijoputa|hdp|ctm|mierda+s?|pelotud[oa]+s?|forr[oa]+s?|la\s*concha+s?|conchud[oa]+s?|verga+s?|pij[ao]+s?|trol[oa]+s?|maricon(?:es|a|as)?|mogolic[oa]s?|retrasad[oa]s?|fuck(?:ing|er|ed)?|shit|bitch(?:es)?|cunt|nigg(?:er|a)s?|dick|asshole))(?=[^a-z]|$)/g;
-function cleanTxt(t){
-  t=String(t);const f=fold(t);let o='',last=0,m;
-  BADRE.lastIndex=0;
-  while((m=BADRE.exec(f))){const s=m.index+m[1].length;o+=t.slice(last,s)+'*'.repeat(m[2].length);last=s+m[2].length}
-  return o+t.slice(last);
-}
-/* Silenciar jugadores (solo en tu pantalla) */
-let LM={};try{LM=JSON.parse(localStorage.getItem('lc_mute'))||{}}catch(e){}
-const isM=c=>Object.prototype.hasOwnProperty.call(LM,c),saveLM=()=>{try{localStorage.setItem('lc_mute',JSON.stringify(LM))}catch(e){}};
-function drawMuted(){const ks=Object.keys(LM);$('lcMuted').innerHTML=ks.length?'Silenciados (tocá para mostrar de nuevo): '+ks.map(c=>`<button class="b sm" data-un="${esc(c)}">${esc(LM[c])} ✕</button>`).join(' '):''}
 function drawLC(){
   const el=$('lcLog');if(!el)return;
   if(!DB){el.innerHTML='<div class="msg">El chat general necesita la base de datos online (DB_URL).</div>';return}
-  const ks=Object.keys(LC).sort().filter(k=>!(LC[k]&&isM(LC[k].c))).slice(-50),near=el.scrollHeight-el.scrollTop-el.clientHeight<60;
+  const ks=Object.keys(LC).sort().slice(-50),near=el.scrollHeight-el.scrollTop-el.clientHeight<60;
   el.innerHTML=ks.length?ks.map(k=>{
     const m=LC[k]&&typeof LC[k]==='object'?LC[k]:{},d=typeof m.ts==='number'?new Date(m.ts):null,
       hm=d?String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'):'';
-    const nn=cleanTxt(String(m.n||'').slice(0,14)),cc=String(m.c||''),canM=m.c!==CID&&/^[a-z0-9]{1,12}$/.test(cc);
-    return `<div class="msg${m.c===CID?' me':''}"><b>${esc(nn)}${hm?' · '+hm:''}${canM?`<button class="mute" data-c="${cc}" data-n="${esc(nn)}" title="Silenciar a ${esc(nn)}" aria-label="Silenciar a ${esc(nn)}">🚫</button>`:''}</b>${esc(cleanTxt(String(m.t||'').slice(0,200)))}</div>`}).join('')
+    return `<div class="msg${m.c===CID?' me':''}"><b>${esc(String(m.n||'').slice(0,14))}${hm?' · '+hm:''}</b>${esc(String(m.t||'').slice(0,200))}</div>`}).join('')
     :'<div class="msg">Todavía no hay mensajes. ¡Saludá a los demás jugadores!</div>';
   if(near||!lcReady)el.scrollTop=el.scrollHeight;
   let fresh=false;
-  ks.forEach(k=>{if(!lcSeen[k]){lcSeen[k]=1;if(lcReady&&LC[k]&&LC[k].c!==CID&&!isM(LC[k].c))fresh=true}});
+  ks.forEach(k=>{if(!lcSeen[k]){lcSeen[k]=1;if(lcReady&&LC[k]&&LC[k].c!==CID)fresh=true}});
   if(fresh)play('msg');
 }
 function lcEv(type,raw){
@@ -983,7 +964,7 @@ function startLC(){
 }
 function stopLC(){if(LES){try{LES.close()}catch(e){}LES=null}}
 async function sendLC(){
-  const inp=$('lcIn'),t=cleanTxt(inp.value.trim().slice(0,200));
+  const inp=$('lcIn'),t=inp.value.trim().slice(0,200);
   if(!t||!DB||Date.now()-lcLast<1200)return;
   lcLast=Date.now();inp.value='';$('lcMsg').textContent='';
   try{await dbj('POST','lobbychat',{n:cleanName($('myname').value,'Invitado'),t,c:CID,ts:{'.sv':'timestamp'}})}
@@ -992,9 +973,6 @@ async function sendLC(){
 $('lcSend').onclick=sendLC;
 $('lcIn').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();sendLC()}};
 $('lcQuick').onclick=e=>{const q=e.target.closest('[data-q]');if(q){$('lcIn').value=q.dataset.q;sendLC()}};
-$('lcLog').onclick=e=>{const b=e.target.closest('.mute');if(b){LM[b.dataset.c]=b.dataset.n||'Jugador';saveLM();drawLC();drawMuted()}};
-$('lcMuted').onclick=e=>{const b=e.target.closest('[data-un]');if(b){delete LM[b.dataset.un];saveLM();drawLC();drawMuted()}};
-drawMuted();
 function stopPub(del=true){
   if(!PUB)return;
   clearInterval(PUB.timer);const c=PUB.code;PUB=null;
