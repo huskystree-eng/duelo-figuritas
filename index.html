@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Duelo de Figuritas</title>
-<link href="https://fonts.googleapis.com/css2?family=Russo+One&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Russo+One&display=swap" rel="stylesheet" media="print" onload="this.media='all'"><noscript><link href="https://fonts.googleapis.com/css2?family=Russo+One&display=swap" rel="stylesheet"></noscript>
 <style>
 :root{--ink:#14101c;--paper:#f3efe6;--gold:#ffc928}
 *{box-sizing:border-box}
@@ -167,8 +168,8 @@ details.rules summary{cursor:pointer;color:var(--gold);font-weight:700;margin-bo
   </div>
   <div class="box">
     <h2>Online: cada uno en su dispositivo (2, 3 o 4 jugadores)</h2>
-    <p class="rules">⚡ <b>Sala abierta</b>: se crea sin código y aparece en la lista de todos durante 15 segundos. Quien entra a tiempo juega (con el formato y el tiempo que elegiste arriba).</p>
-    <p><button class="b" id="openBtn">⚡ Crear sala abierta (15 s)</button></p>
+    <p class="rules">⚡ <b>Sala abierta</b>: se crea sin código y aparece en la lista de todos durante 60 segundos. Quien entra a tiempo juega (con el formato y el tiempo que elegiste arriba).</p>
+    <p><button class="b" id="openBtn">⚡ Crear sala abierta (60 s)</button></p>
     <h2 style="font-size:1rem">🌐 Salas abiertas ahora</h2>
     <div id="rooms" class="rules">Buscando salas…</div>
     <h2 style="font-size:1rem;margin-top:14px">Sala privada con código</h2>
@@ -221,7 +222,10 @@ details.rules summary{cursor:pointer;color:var(--gold);font-weight:700;margin-bo
   <div class="chatin"><input id="chatIn" maxlength="200" placeholder="Escribí un mensaje…" aria-label="Mensaje" autocomplete="off"><button class="b sm" id="chatSend">Enviar</button></div>
 </div>
 </main>
-<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+function loadPeer(){const u=['https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js','https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js'];let i=0;(function n(){if(window.Peer||i>=u.length)return;const e=document.createElement('script');e.src=u[i++];e.async=true;e.onerror=n;document.head.appendChild(e)})()}
+loadPeer();
+</script>
 <script>
 // id|nombre|elemento|color|estado|rol|ataque básico|ataque fuerte
 // estado = el nivel que dice la figurita (1, 2, 3). L = legendario / sin evolución conocida.
@@ -465,8 +469,8 @@ const MAP_M = {};
 M.forEach(m => MAP_M[m.id] = m);
 
 const $=id=>document.getElementById(id),rnd=()=>1+Math.floor(Math.random()*6),wait=ms=>new Promise(r=>setTimeout(r,ms));
-const IMG='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/';
-const fig=m=>`<div class="oval"><b>${m.id}</b><img alt="" src="${IMG}${m.id}.png" onload="this.previousElementSibling.remove()" onerror="this.remove()"></div>
+const IMG='https://cdn.jsdelivr.net/gh/PokeAPI/sprites@master/sprites/pokemon/other/official-artwork/',IMG2='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/';
+const fig=m=>`<div class="oval"><b>${m.id}</b><img alt="" decoding="async" src="${IMG}${m.id}.png" onload="this.previousElementSibling.remove()" onerror="if(this.dataset.f)this.remove();else{this.dataset.f=1;this.src='${IMG2}${m.id}.png'}"></div>
 <div class="brand">¡Atrápalos ya!</div>
 <div class="info"><div>ELEMENTO<span>${m.el}</span></div><div>ESTADO · HP<span>${m.st==='L'?'Legendario':m.st} · ${m.hp} HP</span></div><div>ATAQUE (2 piedras)<span>${m.a1} · ${m.b}</span></div><div>ATAQUE FUERTE (4 piedras)<span>${m.a2} · ${m.s}</span></div></div>
 <div class="tag">#${m.id} ${m.n}</div>`;
@@ -492,9 +496,9 @@ const prof=(r,n)=>r[n.toLowerCase()]||(r[n.toLowerCase()]={n,w:0,l:0,adv:0});
    const DB_URL='https://mi-proyecto-default-rtdb.firebaseio.com';
    Vacía = el ranking queda solo en este dispositivo y no hay salas abiertas. */
 const DB_URL='https://duelo-figuritas-default-rtdb.firebaseio.com';
-const DB=DB_URL.replace(/\/+$/,'');
+const DB=/tu-proyecto/.test(DB_URL)?'':DB_URL.replace(/\/+$/,'');
 let clockOff=0,clockOk=false,RK=null,rkBusy=0;
-const dbj=async(m,p,b,q)=>{const r=await fetch(DB+'/'+p+'.json'+(q||''),{method:m,body:b===undefined?undefined:JSON.stringify(b),keepalive:m==='DELETE'});if(!r.ok)throw new Error(r.status);return r.json()};
+const dbj=async(m,p,b,q)=>{const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),8000);try{const r=await fetch(DB+'/'+p+'.json'+(q||''),{method:m,body:b===undefined?undefined:JSON.stringify(b),keepalive:m==='DELETE',signal:ac.signal});if(!r.ok)throw new Error(r.status);return await r.json()}finally{clearTimeout(tm)}};
 const srv=()=>Date.now()+clockOff;
 async function syncClock(){if(!DB)return;try{const t0=Date.now(),v=await dbj('PUT','clock/t',{'.sv':'timestamp'});clockOff=v-(t0+Date.now())/2;clockOk=true}catch(e){}}
 const rkey=n=>encodeURIComponent(n.toLowerCase().replace(/[.$#\[\]\/]/g,'_'));
@@ -854,7 +858,7 @@ function onGuestMsg(raw){
 
 /* ---- Online (PeerJS) ---- */
 const netMsg=t=>{$('netmsg').textContent=t};
-const needPeer=()=>typeof Peer!=='undefined'||(netMsg('No se pudo cargar PeerJS. Revisá tu conexión a internet.'),false);
+const needPeer=()=>typeof Peer!=='undefined'||(loadPeer(),netMsg('Cargando la conexión online… probá de nuevo en unos segundos.'),false);
 const cleanName=(v,d)=>String(v||'').trim().slice(0,14)||d;
 const makeCode=()=>Array.from({length:4},()=>'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random()*32)]).join('');
 const noNet=()=>({role:null,conn:null,conns:[],hi:[],peer:null});
@@ -871,8 +875,8 @@ function applySnap(d){
   else if(phase==='reveal'){if(prev!=='reveal')rvFresh=true;reveal()}
   else if(G){show('game');render()}
 }
-/* ---- Salas abiertas (sin código, 15 s para unirse) ---- */
-const OPEN_MS=15000;
+/* ---- Salas abiertas (sin código, 60 s para unirse) ---- */
+const OPEN_MS=60000;
 let PUB=null,JX=null,ROOMS=[],RH='';
 function stopPub(del=true){
   if(!PUB)return;
@@ -893,7 +897,7 @@ function startOpen(){
   if(!ok.length){
     if(NET.peer)try{NET.peer.destroy()}catch(e){}
     NET=noNet();ME=null;
-    netMsg('Nadie se unió en 15 segundos. Podés crear otra sala abierta o jugar contra la compu.');return;
+    netMsg('Nadie se unió en 60 segundos. Podés crear otra sala abierta o jugar contra la compu.');return;
   }
   const conns=[NET.conns[0]],names=[NAMES[0]];
   ok.forEach(k=>{conns.push(NET.conns[k]);names.push(NAMES[k])});
