@@ -144,7 +144,7 @@ details.rules summary{cursor:pointer;color:var(--gold);font-weight:700;margin-bo
 
 <section id="lobby">
   <div class="box">
-    <label class="fld">Tu nombre<input id="myname" maxlength="14" placeholder="Tu nombre" autocomplete="off"></label>
+    <label class="fld">Tu nombre<input id="myname" maxlength="14" placeholder="Tu nombre" autocomplete="off" list="known"><datalist id="known"></datalist></label>
     <label class="fld">Tiempo por turno<select id="limit"><option value="0">Sin límite</option><option value="20">20 segundos</option><option value="30">30 segundos</option><option value="45" selected>45 segundos</option><option value="60">60 segundos</option></select></label>
     <label class="fld">Formato (en "Jugar acá" y "Online")<select id="fmt"><option value="ffa2">1 contra 1</option><option value="ffa3">Todos contra todos: 3 jugadores</option><option value="ffa4">Todos contra todos: 4 jugadores</option><option value="team">2 contra 2 (equipos)</option></select></label>
     <p class="rules">El nombre se usa online y contra la compu. El formato y el tiempo valen online (los elige quien crea la sala) y en pantalla compartida. Contra la compu siempre es 1 contra 1. Si se acaba, perdés el turno.</p>
@@ -153,6 +153,11 @@ details.rules summary{cursor:pointer;color:var(--gold);font-weight:700;margin-bo
     <h2>Contra la compu</h2>
     <p class="rules">Jugás solo contra un rival automático. El reparto de figuritas sigue siendo a ciegas.</p>
     <button class="b" id="botBtn">Jugar contra la compu</button>
+  </div>
+  <div class="box">
+    <h2>🗺 Modo aventura</h2>
+    <p class="rules">Enfrentá a 5 entrenadores de la compu, cada uno más fuerte que el anterior. Si perdés, empezás de nuevo. Se guarda tu mejor avance.</p>
+    <button class="b" id="advBtn">Empezar aventura</button>
   </div>
   <div class="box">
     <h2>En este dispositivo</h2>
@@ -165,6 +170,12 @@ details.rules summary{cursor:pointer;color:var(--gold);font-weight:700;margin-bo
     <label class="fld">Código de la sala<input id="code" maxlength="4" placeholder="K7QP" autocomplete="off"></label>
     <p><button class="b" id="joinBtn">Unirme a la sala</button></p>
     <p class="rules" id="netmsg" aria-live="polite"></p>
+  </div>
+  <div class="box">
+    <h2>🏆 Ranking</h2>
+    <p class="rules">Escribí tu nombre arriba para que tus partidas cuenten. El ranking se guarda en este dispositivo y reconoce a cada jugador por su nombre.</p>
+    <div id="rank" class="rules"></div>
+    <button class="b sm" id="rankReset">Borrar ranking</button>
   </div>
 </section>
 
@@ -460,11 +471,32 @@ const esc=t=>String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 const NAMES=['Jugador 1','Jugador 2'];
 const nm=k=>esc(NAMES[k]),took=k=>P.pool.filter(c=>c.o===k).length;
 const nextPick=()=>{for(let k=0;k<N;k++)if(took(k)<2)return k;return 0};
-function setFmt(v){v=v||$('fmt').value;TEAM=v==='team';N=TEAM?4:+v.slice(3);NAMES.length=0;for(let k=0;k<N;k++)NAMES.push('Jugador '+(k+1));$('names').innerHTML=''}
-function buildNames(){$('names').innerHTML=NAMES.map((_,k)=>`<label>Nombre del Jugador ${k+1}${TEAM?' (Equipo '+(k%2?'B':'A')+')':''}<input data-k="${k}" maxlength="14" placeholder="Jugador ${k+1}" autocomplete="off"></label>`).join('')}
+function setFmt(v){ADV=null;v=v||$('fmt').value;TEAM=v==='team';N=TEAM?4:+v.slice(3);NAMES.length=0;for(let k=0;k<N;k++)NAMES.push('Jugador '+(k+1));$('names').innerHTML=''}
+function buildNames(){$('names').innerHTML=NAMES.map((_,k)=>`<label>Nombre del Jugador ${k+1}${TEAM?' (Equipo '+(k%2?'B':'A')+')':''}<input list="known" data-k="${k}" maxlength="14" placeholder="Jugador ${k+1}" autocomplete="off"></label>`).join('')}
 const foes=k=>G.pl.map((_,j)=>j).filter(j=>j!==k&&!G.pl[j].dead&&(!TEAM||j%2!==k%2));
 const tgt=()=>{const f=foes(G.turn);return f.includes(TG)?TG:f[0]};
-function show(id){['lobby','pick','reveal','game'].forEach(i=>$(i).classList.toggle('hide',i!==id));chatVis()}
+let recDone=0,ADV=null;
+const BOSS=['Aprendiz Teo','Domadora Luz','Capitán Rayo','Maestra Flora','Campeón Máximo'];
+const loadRank=()=>{try{return JSON.parse(localStorage.getItem('duelo_rank'))||{}}catch(e){return{}}};
+const saveRank=r=>{try{localStorage.setItem('duelo_rank',JSON.stringify(r))}catch(e){}};
+const isDef=n=>/^(jugador \d|compu)$/i.test(String(n).trim());
+const prof=(r,n)=>r[n.toLowerCase()]||(r[n.toLowerCase()]={n,w:0,l:0,adv:0});
+function renderRank(){
+  const r=loadRank(),a=Object.values(r).sort((x,y)=>y.w-x.w||x.l-y.l);
+  $('rank').innerHTML=a.length?a.slice(0,10).map((p,i)=>`<div>${i+1}. <b>${esc(p.n)}</b> · ${p.w} victorias · ${p.l} derrotas${p.adv?` · 🗺 aventura ${p.adv}/${BOSS.length}`:''}</div>`).join(''):'Todavía no hay partidas registradas.';
+  $('known').innerHTML=a.map(p=>`<option value="${esc(p.n)}">`).join('');
+}
+function recordResult(){
+  const r=loadRank();
+  (ME===null?NAMES.map((_,k)=>k):[ME]).forEach(k=>{const n=NAMES[k];if(isDef(n))return;const p=prof(r,n);p.n=n;if(G.winners.includes(k))p.w++;else p.l++});
+  saveRank(r);renderRank();
+}
+function setBest(n){const r=loadRank(),nm0=NAMES[0];if(isDef(nm0))return;const p=prof(r,nm0);p.adv=Math.max(p.adv||0,n);saveRank(r);renderRank()}
+function advStep(won){
+  if(won){ADV.s++;setBest(ADV.s);if(ADV.s>=BOSS.length){say('🏆 ¡Completaste la aventura!');ADV.lbl='Jugar la aventura de nuevo';ADV.s=0}else{say(`Siguiente rival: ${esc(BOSS[ADV.s])}.`);ADV.lbl='Siguiente combate ▶'}}
+  else{setBest(ADV.s);say('Perdiste la aventura. Podés reintentar desde el primer combate.');ADV.lbl='Reintentar aventura';ADV.s=0}
+}
+function show(id){['lobby','pick','reveal','game'].forEach(i=>$(i).classList.toggle('hide',i!==id));if(id==='lobby')renderRank();chatVis()}
 // Lo que le llega al invitado: sin los datos de las figuritas que todavía no puede ver
 function viewFor(w){
   return{phase,names:NAMES,team:TEAM,
@@ -528,6 +560,7 @@ function reveal(){
 function startGame(){
   const mk=k=>{const cs=P.pool.filter(c=>c.o===k).map(c=>({m:M[c.mi],hp:M[c.mi].hp,max:M[c.mi].hp,shown:false}));if(P.lead[k]===1)cs.reverse();cs[0].shown=true;return{mons:cs,a:0,t:0,pts:0,dead:false}};
   G={pl:NAMES.map((_,k)=>mk(k)),turn:0,rolled:false,bonus:false,extra:0,busy:false,over:false,die:0,rollN:0,hitK:0,hitN:0,evN:0,fx:[],log:[`${nm(0)} empieza. Tirá el dado o cambiá de monstruo.`]};
+  G.gid=Date.now();if(ADV)G.pl[1].mons.forEach(m=>{m.hp=m.max=Math.round(m.hp*(1+.2*ADV.s))});
   G.limit=+$('limit').value||0;G.turnEnd=Date.now()+G.limit*1000;
   lastEv=0;phase='game';show('game');render();
 }
@@ -572,7 +605,7 @@ function render(){
   const mo=cur(),mine=ME!==null&&G.turn===ME;
   const nextEvo = getNextEvo(mo.m);
 
-  $('banner').innerHTML=(G.over?'Fin de la partida':mine?`¡Es tu turno! (${mo.m.n})`:`Turno de ${nm(G.turn)} (${mo.m.n})`)+(G.over?'':'<span id="clock" class="clock"></span>')+(acting&&fo.length>1?`<div class="rules">Atacás a ${nm(tg)} · tocá a otro rival para cambiar</div>`:'');
+  $('banner').innerHTML=(G.over?'Fin de la partida':mine?`¡Es tu turno! (${mo.m.n})`:`Turno de ${nm(G.turn)} (${mo.m.n})`)+(G.over?'':'<span id="clock" class="clock"></span>')+(acting&&fo.length>1?`<div class="rules">Atacás a ${nm(tg)} · tocá a otro rival para cambiar</div>`:'')+(ADV&&!G.over?`<div class="rules">🗺 Aventura: combate ${ADV.s+1}/${BOSS.length} · ${nm(1)}</div>`:'');
   $('atkBtn').textContent=`${mo.m.a1} · ${mo.m.b} HP (2 piedras)`;
   $('spBtn').textContent=`${mo.m.a2} · ${mo.m.s} HP (4 piedras)`;
   $('evoBtn').textContent=nextEvo?`Evolucionar a ${nextEvo.n} (2 piedras)`:`Sin evolución disponible`;
@@ -584,7 +617,8 @@ function render(){
   if(G.hitN!==lastHit){lastHit=G.hitN;if(G.hitN){const b=$('s'+G.hitK);b.classList.add('hit');setTimeout(()=>b.classList.remove('hit'),600)}}
   if(G.evN<lastEv)lastEv=0;
   (G.fx||[]).forEach(e=>{if(e.i>lastEv){lastEv=e.i;play(e.t)}});
-  $('again').classList.toggle('hide',!G.over);
+  if(G.over&&recDone!==G.gid){recDone=G.gid;recordResult();if(ADV&&ME===0)advStep(G.winners.includes(0))}
+  $('again').textContent=(ADV&&ADV.lbl)||'Nueva partida';$('again').classList.toggle('hide',!G.over);
   $('log').innerHTML=G.log.slice(0,3).map(x=>`<div>${x}</div>`).join('');
   tick();
   sync();
@@ -616,7 +650,7 @@ async function hit(kind,t){
     if(b.hp>0){G.pl[k].a=1-G.pl[k].a;b.shown=true;ev('swap');say(`${nm(k)} saca a ${b.m.n}.`)}
     else{G.pl[k].dead=true;say(`${nm(k)} quedó eliminado.`);
       const lv=G.pl.map((p,j)=>p.dead?-1:j).filter(j=>j>=0);
-      if(new Set(lv.map(j=>TEAM?j%2:j)).size<2){G.over=true;ev('win');say(TEAM?`¡Gana el equipo de ${lv.map(nm).join(' y ')}!`:`¡Gana ${nm(lv[0])}!`)}}
+      if(new Set(lv.map(j=>TEAM?j%2:j)).size<2){G.over=true;G.winners=G.pl.map((_,j)=>j).filter(j=>(TEAM?j%2:j)===(TEAM?lv[0]%2:lv[0]));ev('win');say(TEAM?`¡Gana el equipo de ${lv.map(nm).join(' y ')}!`:`¡Gana ${nm(lv[0])}!`)}}
   }
   render();
 }
@@ -679,7 +713,7 @@ function perform(a,i,who){
     if(P.ready.every(Boolean))startGame();else{rvFresh=true;reveal()}
     return;
   }
-  if(a==='again'){if(phase==='game'&&G.over)newPick();return}
+  if(a==='again'){if(phase==='game'&&G.over){if(ADV)NAMES[1]=BOSS[ADV.s];newPick()}return}
   if(!can(a,who))return;
   ({roll:doRoll,stone:doStone,evo:doEvo,atk:doAtk,sp:doSp,swap:doSwap,keep:doKeep})[a](i);
 }
@@ -849,6 +883,10 @@ $('hostBtn').onclick=hostRoom;
 $('joinBtn').onclick=joinRoom;
 $('localBtn').onclick=()=>{if(NET.peer)try{NET.peer.destroy()}catch(e){}NET=noNet();ME=null;BOT=false;setFmt();newPick()};
 $('botBtn').onclick=()=>{if(NET.peer)try{NET.peer.destroy()}catch(e){}NET=noNet();BOT=true;ME=0;setFmt('ffa2');NAMES[0]=cleanName($('myname').value,'Jugador 1');NAMES[1]='Compu';newPick()};
+$('advBtn').onclick=()=>{if(NET.peer)try{NET.peer.destroy()}catch(e){}NET=noNet();BOT=true;ME=0;setFmt('ffa2');ADV={s:0};NAMES[0]=cleanName($('myname').value,'Jugador 1');NAMES[1]=BOSS[0];newPick()};
+$('rankReset').onclick=()=>{if(confirm('¿Borrar todo el ranking de este dispositivo?')){saveRank({});renderRank()}};
+$('myname').oninput=e=>{try{localStorage.setItem('duelo_name',e.target.value.trim())}catch(x){}};
+try{$('myname').value=localStorage.getItem('duelo_name')||''}catch(e){}
 $('chatTog').onclick=()=>{chatOpen=!chatOpen;if(chatOpen)unread=0;renderChat();chatVis()};
 $('chatSend').onclick=()=>{if(sendChat($('chatIn').value))$('chatIn').value=''};
 $('chatIn').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('chatSend').click()}};
