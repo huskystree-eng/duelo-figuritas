@@ -923,15 +923,34 @@ function applySnap(d){
   else if(G){show('game');render()}
 }
 /* ---- Salas abiertas (sin código, 15 s para unirse) ---- */
-const OPEN_MS=15000,GRACE_MS=6000;
+const OPEN_MS=15000,GRACE_MS=8000,PEND_MS=15000;
 let PUB=null,JX=null,ROOMS=[],RH='';
 
 /* ---- Conexión precalentada: el invitado ya está registrado en el servidor de PeerJS antes de tocar "Unirme" ---- */
+/* ---- Servidores de conexión: varios STUN + (opcional) TURN, que es lo que salva las redes que bloquean la conexión directa ----
+   Para usar TURN gratis: cuenta en metered.ca (Open Relay, 20 GB/mes) y pegá abajo UNA de estas dos cosas:
+   TURN_API  = la URL tipo 'https://TUAPP.metered.live/api/v1/turn/credentials?apiKey=TU_KEY'
+   TURN_SERVERS = el array iceServers que te muestra el panel, ej: [{urls:'turn:...',username:'...',credential:'...'}] */
+const TURN_API='';
+const TURN_SERVERS=[];
+let ICE_EXTRA=TURN_SERVERS.slice(),ICE_OK=!TURN_API;
+const iceCfg=()=>({debug:0,config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'},{urls:'stun:global.stun.twilio.com:3478'},{urls:'stun:stun.cloudflare.com:3478'}].concat(ICE_EXTRA),iceCandidatePoolSize:4}});
+async function loadIce(){
+  if(TURN_API){
+    try{
+      const ac=new AbortController(),t=setTimeout(()=>ac.abort(),3000);
+      const r=await fetch(TURN_API,{signal:ac.signal});clearTimeout(t);
+      const a=await r.json();
+      if(Array.isArray(a))ICE_EXTRA=ICE_EXTRA.concat(a.filter(x=>x&&x.urls));
+    }catch(e){}
+  }
+  ICE_OK=true;
+}
 let WARM=null;
 function warmPeer(){
-  if(WARM||NET.role||typeof Peer==='undefined')return;
+  if(WARM||NET.role||!ICE_OK||typeof Peer==='undefined')return;
   try{
-    const p=new Peer(),drop=()=>{if(WARM===p)WARM=null;try{p.destroy()}catch(e){}};
+    const p=new Peer(undefined,iceCfg()),drop=()=>{if(WARM===p)WARM=null;try{p.destroy()}catch(e){}};
     p.on('error',drop);p.on('disconnected',drop);WARM=p;
   }catch(e){WARM=null}
 }
@@ -950,6 +969,102 @@ function setRooms(o){
   ROOMS.sort((x,y)=>x.e-y.e);
   drawRooms();
 }
+/* RELAY-BEGIN */
+/* ---- Conexión alternativa por Firebase: si la directa (WebRTC) no abre, los mensajes viajan por la base ---- */
+function relayListen(path,onTree){
+  let tree={},es=null,closed=false;
+  const open=()=>{
+    es=new EventSource(DB+'/'+path+'.json');
+    const h=type=>e=>{
+      let d;try{d=JSON.parse(e.data)}catch(x){return}
+      const s=String(d.path||'/').split('/').filter(Boolean);
+      if(type==='put')tree=rtSet(tree,s,d.data)||{};
+      else Object.entries(d.data||{}).forEach(([k,v])=>{tree=rtSet(tree,s.concat(k.split('/').filter(Boolean)),v)||{}});
+      onTree(tree);
+    };
+    es.addEventListener('put',h('put'));es.addEventListener('patch',h('patch'));
+    es.onerror=()=>{if(!closed&&es.readyState===2)setTimeout(()=>{if(!closed)open()},1500)};
+  };
+  open();
+  return{close(){closed=true;try{es.close()}catch(x){}}};
+}
+class RelayConn{
+  constructor(role,code,pid){
+    this.relay=true;this.role=role;this.pid=pid;this.peer='relay-'+pid;this.metadata={pid};
+    this.base='relay/'+code+'/'+pid;this.sout=role==='host'?'h':'g';this.sin=role==='host'?'g':'h';
+    this.open=false;this.dead=false;this.ev={};this.seq=1;this.next=1;this.last=Date.now();this.es=null;this.hb=null;
+  }
+  on(e,f){(this.ev[e]=this.ev[e]||[]).push(f);return this}
+  emit(e,a){(this.ev[e]||[]).slice().forEach(f=>{try{f(a)}catch(x){}})}
+  key(n){return'm'+String(n).padStart(7,'0')}
+  beat(){
+    if(this.hb)return;
+    this.hb=setInterval(()=>{if(this.dead)return;if(this.open)this.send('{"t":"ping"}');if(Date.now()-this.last>45000)this.shut(true)},4000);
+  }
+  send(m){
+    if(this.dead)return;
+    const k=this.key(this.seq++),go=n=>dbj('PUT',this.base+'/'+this.sout+'/'+k,String(m)).catch(()=>{if(n<3&&!this.dead)setTimeout(()=>go(n+1),400*(n+1))});
+    go(0);
+  }
+  consume(map){
+    if(!map||typeof map!=='object'||this.dead)return;
+    for(;;){
+      const k=this.key(this.next),raw=map[k];
+      if(typeof raw!=='string')break;
+      delete map[k];this.next++;this.last=Date.now();
+      dbj('DELETE',this.base+'/'+this.sin+'/'+k).catch(()=>{});
+      if(raw.indexOf('"ping"')>=0){try{if(JSON.parse(raw).t==='ping')continue}catch(x){}}
+      this.emit('data',raw);
+    }
+  }
+  shut(remote){
+    if(this.dead)return;
+    this.dead=true;clearInterval(this.hb);if(this.es)this.es.close();
+    const was=this.open;this.open=false;
+    if(remote&&was)this.emit('close');
+  }
+  close(){if(this.dead)return;this.shut(false);if(DB)dbj('DELETE',this.base).catch(()=>{})}
+  async start(){ // lado invitado
+    try{await dbj('DELETE',this.base);await dbj('PUT',this.base+'/join',Date.now())}catch(x){this.shut(false);return}
+    if(this.dead){dbj('DELETE',this.base).catch(()=>{});return}
+    this.es=relayListen(this.base,T=>{
+      if(this.dead)return;
+      if(T.ack&&!this.open){this.open=true;this.last=Date.now();this.beat();this.emit('open')}
+      else if(this.open&&!T.ack)this.shut(true);
+      if(this.open&&T[this.sin])this.consume(T[this.sin]);
+    });
+  }
+}
+let RHOST=null,GRELAY=null;
+function relayHostTree(R,T){
+  Object.keys(T).forEach(pid=>{
+    const r=T[pid];if(!r||typeof r!=='object'||!r.join)return;
+    let c=R.conns[pid];
+    if(!c||(c.dead&&c.joinTs!==r.join)){
+      if(!R.alive())return;
+      c=R.conns[pid]=new RelayConn('host',R.code,pid);c.joinTs=r.join;c.open=true;c.beat();
+      dbj('PUT',c.base+'/ack',1).catch(()=>{});
+      R.accept(c);
+    }
+    if(!c.dead)c.consume(r.g);
+  });
+  Object.keys(R.conns).forEach(pid=>{const c=R.conns[pid];if(!c.dead&&!(T[pid]&&T[pid].join))c.shut(true)});
+}
+function startRelayHost(code,accept,alive){
+  stopRelayHost(true);
+  if(!DB)return;
+  const R={code,accept,alive,conns:{}};
+  R.l=relayListen('relay/'+code,T=>relayHostTree(R,T));
+  RHOST=R;
+}
+function stopRelayHost(del){
+  if(!RHOST)return;
+  const R=RHOST;RHOST=null;R.l.close();
+  Object.values(R.conns).forEach(c=>c.shut(false));
+  if(del&&DB)dbj('DELETE','relay/'+R.code).catch(()=>{});
+}
+/* RELAY-END */
+
 function rtEv(type,raw){
   lastEs=Date.now();
   let d;try{d=JSON.parse(raw)}catch(e){return}
@@ -1027,8 +1142,10 @@ function tickPub(){
   if(!PUB)return;
   if(NET.role!=='host'||NET.code!==PUB.code||phase!=='lobby'){stopPub();return}
   roomMsg();
-  if(srv()>=PUB.exp)startOpen();
+  if(srv()>=PUB.exp&&!pendingConn())startOpen();
 }
+// Hay alguien que ya tocó "Unirme" y está negociando la conexión (hasta PEND_MS)
+const pendingConn=()=>NET.conns.some((c,k)=>k&&c&&!NET.hi[k]&&Date.now()-(c._t0||0)<PEND_MS);
 function startOpen(){
   stopPub();
   const ok=[];NET.conns.forEach((c,k)=>{if(k&&c&&NET.hi[k])ok.push(k)});
@@ -1051,6 +1168,7 @@ function roomMsg(){
   const n=NET.hi.filter(Boolean).length+1,who=NAMES.filter((x,k)=>k===0||NET.hi[k]).map(esc).join(', ');
   if(PUB&&PUB.code===NET.code){
     const s=Math.max(0,Math.ceil((PUB.exp-srv())/1000));
+    if(s<=0&&pendingConn()){$('netmsg').innerHTML=`Conectando con un jugador… esperá unos segundos<br>Jugadores: ${n}/${N} (${who})`;return}
     $('netmsg').innerHTML=`Sala abierta y visible para todos. Arranca en <b class="code">${s}</b> s<br>Jugadores: ${n}/${N} (${who})<br>Si entra al menos 1 más, empieza sola. (no cierres esta pestaña)`;return;
   }
   $('netmsg').innerHTML=`Sala creada. Pasale este código a los demás: <b class="code">${NET.code}</b><br>Jugadores: ${n}/${N} (${who})<br>Esperando que se unan… (no cierres esta pestaña)`;
@@ -1074,10 +1192,10 @@ function hostRoom(open){
   if(!needPeer())return;
   if(BANS[PID]){netMsg('Tu ID está suspendido: no podés jugar online.');return}
   if(open!==true)open=false;
-  stopPub();
+  stopPub();stopRelayHost(true);
   if(NET.peer)try{NET.peer.destroy()}catch(e){}
   setFmt();NAMES[0]=cleanName($('myname').value,'Jugador 1');
-  const code=makeCode(),peer=new Peer('duelofig-'+code);
+  const code=makeCode(),peer=new Peer('duelofig-'+code,iceCfg());
   NET=noNet();NET.role='host';NET.peer=peer;NET.code=code;NET.conns=Array(N).fill(null);ME=0;BOT=false;resetChat();
   netMsg('Creando sala…');
   peer.on('open',async()=>{
@@ -1091,13 +1209,18 @@ function hostRoom(open){
     PUB={code,exp,timer:setInterval(tickPub,250)};roomMsg();pollRooms();
   });
   peer.on('error',e=>{if(e.type==='unavailable-id'){hostRoom(open)}else netMsg('No se pudo crear la sala ('+e.type+'). Probá de nuevo.')});
-  peer.on('connection',c=>{
+  const accept=c=>{
+    c._t0=Date.now();
+    // si el mismo jugador reintenta (o quedó una conexión trabada), se libera su lugar
+    NET.conns.forEach((x,j)=>{if(j>0&&x&&!NET.hi[j]&&(x.peer===c.peer||(x.metadata&&c.metadata&&x.metadata.pid&&x.metadata.pid===c.metadata.pid)||Date.now()-(x._t0||0)>PEND_MS)){NET.conns[j]=null;try{x.close()}catch(e){}}});
     const k=NET.conns.findIndex((x,j)=>j>0&&!x);
     if(k<0||phase!=='lobby'||NET.peer!==peer){c.close();return}
     NET.conns[k]=c;c.on('data',r=>{const i=NET.conns.indexOf(c);if(i>0)onHostMsg(r,i)});
     const gone=()=>{const i=NET.conns.indexOf(c);if(i<1)return;if(phase==='lobby'){NET.conns[i]=null;NET.hi[i]=false;roomMsg();pubJ()}else lost()};
     c.on('close',gone);c.on('error',gone);
-  });
+  };
+  peer.on('connection',accept);
+  startRelayHost(code,accept,()=>NET.role==='host'&&NET.code===code&&NET.peer===peer);
 }
 function openRoom(){
   if(!DB){netMsg('Las salas abiertas necesitan la base de datos online. Configurá DB_URL en el código.');return}
@@ -1113,19 +1236,39 @@ function joinRoom(code,room){
   const name=cleanName($('myname').value,'Jugador 2');
   let peer;
   if(WARM&&!WARM.destroyed&&!WARM.disconnected){peer=WARM;WARM=null;peer.removeAllListeners('error');peer.removeAllListeners('disconnected')}
-  else peer=new Peer();
+  else peer=new Peer(undefined,iceCfg());
   NET=noNet();NET.role='guest';NET.peer=peer;ME=null;BOT=false;resetChat();
-  JX=room?{e:room.e,h:room.h,ok:false}:null;
+  JX=room?{e:room.e,h:room.h,ok:false,t0:Date.now()}:null;
   netMsg('Conectando…');
-  const go=()=>{
-    const c=peer.connect('duelofig-'+code,{reliable:true});NET.conn=c;
-    c.on('open',()=>{c.send(JSON.stringify({t:'hello',name,pid:PID}));if(JX)JX.ok=true;netMsg('Conectado. Esperando que arranque la partida…')});
-    c.on('data',onGuestMsg);
-    c.on('close',lost);c.on('error',lost);
-    setTimeout(()=>{if(NET.conn===c&&!c.open)netMsg('Tarda en conectar. Revisá el código o probá de nuevo.')},15000);
+  let done=false;const cons=[];
+  const wire=c=>{
+    cons.push(c);
+    c.on('open',()=>{
+      if(done||NET.peer!==peer)return;done=true;      // la primera vía que abre gana
+      NET.conn=c;cons.forEach(x=>{if(x!==c)try{x.close()}catch(e){}});
+      c.send(JSON.stringify({t:'hello',name,pid:PID}));if(JX)JX.ok=true;
+      netMsg('Conectado'+(c.relay?' (modo alternativo)':'')+'. Esperando que arranque la partida…');
+    });
+    c.on('data',r=>{if(done&&NET.conn===c)onGuestMsg(r)});
+    const bye=()=>{if(done&&NET.conn===c)lost()};
+    c.on('close',bye);c.on('error',bye);
   };
+  const p2p=()=>{const c=peer.connect('duelofig-'+code,{reliable:true,metadata:{pid:PID}});NET.conn=c;wire(c)};
+  // Plan B: si la conexión directa no abrió, se usa Firebase como puente (funciona en cualquier red)
+  const viaRelay=()=>{
+    if(done||!DB||NET.peer!==peer||GRELAY)return;
+    cons.forEach(x=>{try{x.close()}catch(e){}});
+    const c=new RelayConn('guest',code,PID);GRELAY=c;NET.conn=c;wire(c);c.start();
+  };
+  const go=()=>{if(!done&&NET.peer===peer)p2p()};
   if(peer.open)go();else peer.on('open',go);
-  peer.on('error',e=>netMsg(e.type==='peer-unavailable'?'No encontré esa sala. Puede que ya haya arrancado o se haya cerrado.':'No se pudo conectar ('+e.type+').'));
+  setTimeout(viaRelay,4500);
+  setTimeout(()=>{if(!done&&NET.peer===peer){cons.forEach(x=>{try{x.close()}catch(e){}});netMsg('No se pudo conectar. Revisá que la sala siga abierta o probá de nuevo.')}},20000);
+  peer.on('error',e=>{
+    if(done)return;
+    if(DB){viaRelay();return}
+    netMsg(e.type==='peer-unavailable'?'No encontré esa sala. Puede que ya haya arrancado o se haya cerrado.':'No se pudo conectar ('+e.type+').');
+  });
 }
 async function pollRooms(){
   if(!DB||phase!=='lobby'||document.hidden||streamOk())return;
@@ -1144,6 +1287,9 @@ function drawRooms(){
 }
 function tickAll(){
   if(phase==='lobby')drawRooms();
+  if(RHOST){const R=RHOST;if(NET.role!=='host'||NET.code!==R.code)stopRelayHost(true);else if(phase!=='lobby'&&!Object.values(R.conns).some(c=>!c.dead))stopRelayHost(true)}
+  if(GRELAY&&(NET.role!=='guest'||NET.conn!==GRELAY)){GRELAY.close();GRELAY=null}
+  if(JX&&NET.role==='guest'&&phase==='lobby'&&!JX.ok&&NET.conn&&!NET.conn.open)netMsg(`Conectando con ${JX.h}… ${Math.floor((Date.now()-JX.t0)/1000)} s${NET.conn.relay?' · modo alternativo':''}`);
   if(JX&&NET.role==='guest'&&phase==='lobby'&&JX.ok){
     const s=Math.ceil((JX.e-srv())/1000);
     netMsg(s>0?`Entraste a la sala de ${JX.h}. Arranca en ${s} s…`:'Arrancando la partida…');
@@ -1174,9 +1320,9 @@ const updMute=()=>{$('muteBtn').textContent=MUTE?'🔇':'🔊';$('muteBtn').setA
 $('muteBtn').onclick=()=>{MUTE=!MUTE;try{localStorage.setItem('mute',MUTE?'1':'0')}catch(e){}updMute();if(!MUTE)play('pick')};
 updMute();
 $('myPid').textContent='#'+PID;
-syncClock();loadBans();setInterval(loadBans,60000);
+syncClock();loadBans();loadIce().then(()=>warmPeer());setInterval(loadBans,60000);
 setInterval(tickAll,500);setInterval(pollRooms,2500);setInterval(()=>{if(phase==='lobby'&&!document.hidden)renderRank()},20000);
-addEventListener('pagehide',()=>{if(PUB&&DB)try{fetch(DB+'/rooms/'+PUB.code+'.json',{method:'DELETE',keepalive:true})}catch(e){}});
+addEventListener('pagehide',()=>{if(DB){if(PUB)try{fetch(DB+'/rooms/'+PUB.code+'.json',{method:'DELETE',keepalive:true})}catch(e){}if(RHOST)try{fetch(DB+'/relay/'+RHOST.code+'.json',{method:'DELETE',keepalive:true})}catch(e){}}});
 show('lobby');
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&phase==='lobby'){warmPeer();startStream();pollRooms()}});
 </script>
