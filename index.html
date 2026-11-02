@@ -167,16 +167,21 @@ details.rules summary{cursor:pointer;color:var(--gold);font-weight:700;margin-bo
   </div>
   <div class="box">
     <h2>Online: cada uno en su dispositivo (2, 3 o 4 jugadores)</h2>
-    <p><button class="b" id="hostBtn">Crear sala</button></p>
+    <p class="rules">⚡ <b>Sala abierta</b>: se crea sin código y aparece en la lista de todos durante 15 segundos. Quien entra a tiempo juega (con el formato y el tiempo que elegiste arriba).</p>
+    <p><button class="b" id="openBtn">⚡ Crear sala abierta (15 s)</button></p>
+    <h2 style="font-size:1rem">🌐 Salas abiertas ahora</h2>
+    <div id="rooms" class="rules">Buscando salas…</div>
+    <h2 style="font-size:1rem;margin-top:14px">Sala privada con código</h2>
+    <p><button class="b" id="hostBtn">Crear sala con código</button></p>
     <label class="fld">Código de la sala<input id="code" maxlength="4" placeholder="K7QP" autocomplete="off"></label>
     <p><button class="b" id="joinBtn">Unirme a la sala</button></p>
     <p class="rules" id="netmsg" aria-live="polite"></p>
   </div>
   <div class="box">
     <h2>🏆 Ranking</h2>
-    <p class="rules">Escribí tu nombre arriba para que tus partidas cuenten. El ranking se guarda en este dispositivo y reconoce a cada jugador por su nombre.</p>
+    <p class="rules">Escribí tu nombre arriba para que tus partidas cuenten. Es un ranking global: lo ven todos los dispositivos (Top 10) y reconoce a cada jugador por su nombre.</p>
     <div id="rank" class="rules"></div>
-    <button class="b sm" id="rankReset">Borrar ranking</button>
+    <button class="b sm" id="rankRefresh">🔄 Actualizar</button>
   </div>
 </section>
 
@@ -482,22 +487,56 @@ const loadRank=()=>{try{return JSON.parse(localStorage.getItem('duelo_rank'))||{
 const saveRank=r=>{try{localStorage.setItem('duelo_rank',JSON.stringify(r))}catch(e){}};
 const isDef=n=>/^(jugador \d|compu)$/i.test(String(n).trim());
 const prof=(r,n)=>r[n.toLowerCase()]||(r[n.toLowerCase()]={n,w:0,l:0,adv:0});
-function renderRank(){
-  const r=loadRank(),a=Object.values(r).sort((x,y)=>y.w-x.w||x.l-y.l);
-  $('rank').innerHTML=a.length?a.slice(0,10).map((p,i)=>`<div>${i+1}. <b>${esc(p.n)}</b> · ${p.w} victorias · ${p.l} derrotas${p.adv?` · 🗺 aventura ${p.adv}/${BOSS.length}`:''}</div>`).join(''):'Todavía no hay partidas registradas.';
+/* ---- Base de datos online (Firebase Realtime Database, vía REST) ----
+   Pegá acá la URL de tu base, sin barra final. Ejemplo:
+   const DB_URL='https://tu-proyecto-default-rtdb.firebaseio.com';
+   Vacía = el ranking queda solo en este dispositivo y no hay salas abiertas. */
+const DB_URL='';
+const DB=DB_URL.replace(/\/+$/,'');
+let clockOff=0,clockOk=false,RK=null,rkBusy=0;
+const dbj=async(m,p,b,q)=>{const r=await fetch(DB+'/'+p+'.json'+(q||''),{method:m,body:b===undefined?undefined:JSON.stringify(b),keepalive:m==='DELETE'});if(!r.ok)throw new Error(r.status);return r.json()};
+const srv=()=>Date.now()+clockOff;
+async function syncClock(){if(!DB)return;try{const t0=Date.now(),v=await dbj('PUT','clock/t',{'.sv':'timestamp'});clockOff=v-(t0+Date.now())/2;clockOk=true}catch(e){}}
+const rkey=n=>encodeURIComponent(n.toLowerCase().replace(/[.$#\[\]\/]/g,'_'));
+async function loadRemote(){
+  if(!DB)return null;
+  try{
+    let o;
+    try{o=await dbj('GET','ranking',undefined,'?orderBy='+encodeURIComponent('"w"')+'&limitToLast=40')}
+    catch(e){o=await dbj('GET','ranking')}
+    RK=Object.values(o||{}).filter(p=>p&&p.n)
+  }catch(e){RK=null}
+  return RK;
+}
+function drawRank(){
+  const a=(RK||Object.values(loadRank())).slice().sort((x,y)=>(y.w||0)-(x.w||0)||(x.l||0)-(y.l||0)),med=['🥇','🥈','🥉'];
+  const note=!DB?'<div>⚠ Ranking global sin configurar: se muestra solo el de este dispositivo.</div>':RK?'':'<div>⚠ No se pudo conectar al ranking global: se muestra el de este dispositivo.</div>';
+  $('rank').innerHTML=(a.length?a.slice(0,10).map((p,i)=>`<div>${med[i]||(i+1)+'.'} <b>${esc(p.n)}</b> · ${p.w||0} victorias · ${p.l||0} derrotas${p.adv?` · 🗺 aventura ${p.adv}/${BOSS.length}`:''}</div>`).join(''):'Todavía no hay partidas registradas.')+note;
   $('known').innerHTML=a.map(p=>`<option value="${esc(p.n)}">`).join('');
+}
+function renderRank(force){drawRank();if(DB&&(force||Date.now()-rkBusy>3000)){rkBusy=Date.now();loadRemote().then(drawRank)}}
+async function pushRank(n,won){
+  if(!DB)return;
+  try{await dbj('PATCH','ranking/'+rkey(n),{n,w:{'.sv':{increment:won?1:0}},l:{'.sv':{increment:won?0:1}}});renderRank(true)}catch(e){}
+}
+async function pushBest(n,name){
+  if(!DB)return;
+  try{
+    const cur=await dbj('GET','ranking/'+rkey(name)+'/adv');
+    if(n>(cur||0)){await dbj('PATCH','ranking/'+rkey(name),{n:name,adv:n,w:{'.sv':{increment:0}},l:{'.sv':{increment:0}}});renderRank(true)}
+  }catch(e){}
 }
 function recordResult(){
   const r=loadRank();
-  (ME===null?NAMES.map((_,k)=>k):[ME]).forEach(k=>{const n=NAMES[k];if(isDef(n))return;const p=prof(r,n);p.n=n;if(G.winners.includes(k))p.w++;else p.l++});
-  saveRank(r);renderRank();
+  (ME===null?NAMES.map((_,k)=>k):[ME]).forEach(k=>{const n=NAMES[k];if(isDef(n))return;const p=prof(r,n),won=G.winners.includes(k);p.n=n;if(won)p.w++;else p.l++;pushRank(n,won)});
+  saveRank(r);drawRank();
 }
-function setBest(n){const r=loadRank(),nm0=NAMES[0];if(isDef(nm0))return;const p=prof(r,nm0);p.adv=Math.max(p.adv||0,n);saveRank(r);renderRank()}
+function setBest(n){const r=loadRank(),nm0=NAMES[0];if(isDef(nm0))return;const p=prof(r,nm0);p.adv=Math.max(p.adv||0,n);saveRank(r);drawRank();pushBest(n,nm0)}
 function advStep(won){
   if(won){ADV.s++;setBest(ADV.s);if(ADV.s>=BOSS.length){say('🏆 ¡Completaste la aventura!');ADV.lbl='Jugar la aventura de nuevo';ADV.s=0}else{say(`Siguiente rival: ${esc(BOSS[ADV.s])}.`);ADV.lbl='Siguiente combate ▶'}}
   else{setBest(ADV.s);say('Perdiste la aventura. Podés reintentar desde el primer combate.');ADV.lbl='Reintentar aventura';ADV.s=0}
 }
-function show(id){['lobby','pick','reveal','game'].forEach(i=>$(i).classList.toggle('hide',i!==id));$('menuBtn').classList.toggle('hide',id==='lobby');if(id==='lobby')renderRank();chatVis()}
+function show(id){['lobby','pick','reveal','game'].forEach(i=>$(i).classList.toggle('hide',i!==id));$('menuBtn').classList.toggle('hide',id==='lobby');if(id==='lobby'){renderRank();pollRooms()}chatVis()}
 // Lo que le llega al invitado: sin los datos de las figuritas que todavía no puede ver
 function viewFor(w){
   return{phase,names:NAMES,team:TEAM,
@@ -821,6 +860,7 @@ const makeCode=()=>Array.from({length:4},()=>'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[
 const noNet=()=>({role:null,conn:null,conns:[],hi:[],peer:null});
 function bc(o,skip){NET.conns.forEach((c,k)=>{if(k&&k!==skip&&c&&c.open&&NET.hi[k])c.send(JSON.stringify(o))})}
 function lost(){
+  stopPub();
   if(NET.peer)try{NET.peer.destroy()}catch(e){}
   const was=NET.role;NET=noNet();ME=null;
   if(was){phase='lobby';show('lobby');netMsg('Se cortó la conexión con otro jugador. Creen una sala nueva para seguir.')}
@@ -831,68 +871,155 @@ function applySnap(d){
   else if(phase==='reveal'){if(prev!=='reveal')rvFresh=true;reveal()}
   else if(G){show('game');render()}
 }
+/* ---- Salas abiertas (sin código, 15 s para unirse) ---- */
+const OPEN_MS=15000;
+let PUB=null,JX=null,ROOMS=[],RH='';
+function stopPub(del=true){
+  if(!PUB)return;
+  clearInterval(PUB.timer);const c=PUB.code;PUB=null;
+  if(DB&&del)dbj('DELETE','rooms/'+c).catch(()=>{});
+}
+const pubJ=()=>{if(PUB&&DB)dbj('PATCH','rooms/'+PUB.code,{j:NET.hi.filter(Boolean).length+1}).catch(()=>{})};
+function tickPub(){
+  if(!PUB)return;
+  if(NET.role!=='host'||NET.code!==PUB.code||phase!=='lobby'){stopPub();return}
+  roomMsg();
+  if(srv()>=PUB.exp)startOpen();
+}
+function startOpen(){
+  stopPub();
+  const ok=[];NET.conns.forEach((c,k)=>{if(k&&c&&NET.hi[k])ok.push(k)});
+  NET.conns.forEach((c,k)=>{if(k&&c&&!NET.hi[k])try{c.close()}catch(e){}});
+  if(!ok.length){
+    if(NET.peer)try{NET.peer.destroy()}catch(e){}
+    NET=noNet();ME=null;
+    netMsg('Nadie se unió en 15 segundos. Podés crear otra sala abierta o jugar contra la compu.');return;
+  }
+  const conns=[NET.conns[0]],names=[NAMES[0]];
+  ok.forEach(k=>{conns.push(NET.conns[k]);names.push(NAMES[k])});
+  const n=conns.length;
+  if(n!==N)setFmt('ffa'+n);
+  names.forEach((x,k)=>{NAMES[k]=x});
+  NET.conns=conns;NET.hi=conns.map(()=>true);
+  conns.forEach((c,k)=>{if(k)try{c.send(JSON.stringify({t:'seat',k}))}catch(e){}});
+  newPick();
+}
 function roomMsg(){
-  const n=NET.hi.filter(Boolean).length+1;
-  $('netmsg').innerHTML=`Sala creada. Pasale este código a los demás: <b class="code">${NET.code}</b><br>Jugadores: ${n}/${N} (${NAMES.filter((x,k)=>k===0||NET.hi[k]).map(esc).join(', ')})<br>Esperando que se unan… (no cierres esta pestaña)`;
+  const n=NET.hi.filter(Boolean).length+1,who=NAMES.filter((x,k)=>k===0||NET.hi[k]).map(esc).join(', ');
+  if(PUB&&PUB.code===NET.code){
+    const s=Math.max(0,Math.ceil((PUB.exp-srv())/1000));
+    $('netmsg').innerHTML=`Sala abierta y visible para todos. Arranca en <b class="code">${s}</b> s<br>Jugadores: ${n}/${N} (${who})<br>Si entra al menos 1 más, empieza sola. (no cierres esta pestaña)`;return;
+  }
+  $('netmsg').innerHTML=`Sala creada. Pasale este código a los demás: <b class="code">${NET.code}</b><br>Jugadores: ${n}/${N} (${who})<br>Esperando que se unan… (no cierres esta pestaña)`;
 }
 function onHostMsg(raw,k){
   let d;try{d=JSON.parse(raw)}catch(e){return}
   if(d.t==='hello'){
     if(NET.hi[k])return;
     NAMES[k]=cleanName(d.name,'Jugador '+(k+1));NET.hi[k]=true;NET.conns[k].send(JSON.stringify({t:'seat',k}));
-    if(NET.conns.slice(1).every((c,j)=>NET.hi[j+1]))newPick();else roomMsg();
+    if(NET.conns.slice(1).every((c,j)=>NET.hi[j+1])){stopPub();newPick()}else{roomMsg();pubJ()}
   }
   else if(!NET.hi[k])return;
   else if(d.t==='chat'){const t=String(d.text||'').slice(0,200);addChat(false,NAMES[k],t);bc({t:'chat',name:NAMES[k],text:t},k)}
   else if(d.t==='a'&&typeof d.a==='string')perform(d.a,d.i,k);
 }
-function hostRoom(){
+function hostRoom(open){
   if(!needPeer())return;
+  if(open!==true)open=false;
+  stopPub();
   if(NET.peer)try{NET.peer.destroy()}catch(e){}
   setFmt();NAMES[0]=cleanName($('myname').value,'Jugador 1');
   const code=makeCode(),peer=new Peer('duelofig-'+code);
   NET=noNet();NET.role='host';NET.peer=peer;NET.code=code;NET.conns=Array(N).fill(null);ME=0;BOT=false;resetChat();
   netMsg('Creando sala…');
-  peer.on('open',roomMsg);
-  peer.on('error',e=>{if(e.type==='unavailable-id'){hostRoom()}else netMsg('No se pudo crear la sala ('+e.type+'). Probá de nuevo.')});
+  peer.on('open',async()=>{
+    if(!open){roomMsg();return}
+    if(!clockOk)await syncClock();
+    if(NET.peer!==peer)return;
+    const exp=srv()+OPEN_MS;
+    try{await dbj('PUT','rooms/'+code,{h:NAMES[0],n:N,j:1,e:exp,tm:TEAM?1:0})}
+    catch(e){netMsg('No se pudo publicar la sala abierta. Revisá tu conexión o usá una sala con código.');return}
+    if(NET.peer!==peer){dbj('DELETE','rooms/'+code).catch(()=>{});return}
+    PUB={code,exp,timer:setInterval(tickPub,250)};roomMsg();pollRooms();
+  });
+  peer.on('error',e=>{if(e.type==='unavailable-id'){hostRoom(open)}else netMsg('No se pudo crear la sala ('+e.type+'). Probá de nuevo.')});
   peer.on('connection',c=>{
     const k=NET.conns.findIndex((x,j)=>j>0&&!x);
-    if(k<0||phase!=='lobby'){c.close();return}
-    NET.conns[k]=c;c.on('data',r=>onHostMsg(r,k));
-    const gone=()=>{if(NET.conns[k]!==c)return;if(phase==='lobby'){NET.conns[k]=null;NET.hi[k]=false;roomMsg()}else lost()};
+    if(k<0||phase!=='lobby'||NET.peer!==peer){c.close();return}
+    NET.conns[k]=c;c.on('data',r=>{const i=NET.conns.indexOf(c);if(i>0)onHostMsg(r,i)});
+    const gone=()=>{const i=NET.conns.indexOf(c);if(i<1)return;if(phase==='lobby'){NET.conns[i]=null;NET.hi[i]=false;roomMsg();pubJ()}else lost()};
     c.on('close',gone);c.on('error',gone);
   });
 }
-function joinRoom(){
+function openRoom(){
+  if(!DB){netMsg('Las salas abiertas necesitan la base de datos online. Configurá DB_URL en el código.');return}
+  hostRoom(true);
+}
+function joinRoom(code,room){
   if(!needPeer())return;
-  const code=$('code').value.trim().toUpperCase();
+  code=String(typeof code==='string'?code:$('code').value).trim().toUpperCase();
   if(code.length!==4){netMsg('Escribí el código de 4 letras que te pasó tu rival.');return}
+  stopPub();
   if(NET.peer)try{NET.peer.destroy()}catch(e){}
   const name=cleanName($('myname').value,'Jugador 2'),peer=new Peer();
   NET=noNet();NET.role='guest';NET.peer=peer;ME=null;BOT=false;resetChat();
+  JX=room?{e:room.e,h:room.h,ok:false}:null;
   netMsg('Conectando…');
   peer.on('open',()=>{
     const c=peer.connect('duelofig-'+code,{reliable:true});NET.conn=c;
-    c.on('open',()=>{c.send(JSON.stringify({t:'hello',name}));netMsg('Conectado. Esperando que arranque la partida…')});
+    c.on('open',()=>{c.send(JSON.stringify({t:'hello',name}));if(JX)JX.ok=true;netMsg('Conectado. Esperando que arranque la partida…')});
     c.on('data',onGuestMsg);
     c.on('close',lost);c.on('error',lost);
     setTimeout(()=>{if(NET.conn===c&&!c.open)netMsg('Tarda en conectar. Revisá el código o probá de nuevo.')},15000);
   });
-  peer.on('error',e=>netMsg(e.type==='peer-unavailable'?'No encontré esa sala. Revisá el código.':'No se pudo conectar ('+e.type+').'));
+  peer.on('error',e=>netMsg(e.type==='peer-unavailable'?'No encontré esa sala. Puede que ya haya arrancado o se haya cerrado.':'No se pudo conectar ('+e.type+').'));
 }
-$('hostBtn').onclick=hostRoom;
-$('joinBtn').onclick=joinRoom;
+async function pollRooms(){
+  if(!DB||phase!=='lobby'||document.hidden)return;
+  try{
+    const o=await dbj('GET','rooms'),now=srv();ROOMS=[];
+    Object.entries(o||{}).forEach(([c,r])=>{
+      if(!r||typeof r.e!=='number')return;
+      if(r.e<now-20000){dbj('DELETE','rooms/'+c).catch(()=>{});return}
+      ROOMS.push({c,...r});
+    });
+    ROOMS.sort((x,y)=>x.e-y.e);
+  }catch(e){ROOMS=null}
+  drawRooms();
+}
+function drawRooms(){
+  const el=$('rooms');let h;
+  if(!DB)h='Para ver y crear salas abiertas hay que configurar la base de datos online (DB_URL).';
+  else if(ROOMS===null)h='No se pudo cargar la lista de salas. Se reintenta sola.';
+  else{
+    const now=srv(),l=ROOMS.filter(r=>r.e>now&&!(PUB&&PUB.code===r.c));
+    h=l.length?l.map(r=>`<div>🌐 <b>${esc(r.h)}</b> · ${+r.j||1}/${+r.n||2} jugadores${r.tm?' (equipos)':''} · ⏱ <span data-e="${+r.e}"></span> s ${(+r.j||1)<(+r.n||2)?`<button class="b sm" data-join="${esc(r.c)}">Unirme</button>`:'(llena)'}</div>`).join(''):'No hay salas abiertas ahora. Creá una y esperá a que se sumen.';
+  }
+  if(h!==RH){RH=h;el.innerHTML=h}
+  el.querySelectorAll('[data-e]').forEach(x=>{x.textContent=Math.max(0,Math.ceil((+x.dataset.e-srv())/1000))});
+}
+function tickAll(){
+  if(phase==='lobby')drawRooms();
+  if(JX&&NET.role==='guest'&&phase==='lobby'&&JX.ok){
+    const s=Math.ceil((JX.e-srv())/1000);
+    netMsg(s>0?`Entraste a la sala de ${JX.h}. Arranca en ${s} s…`:'Arrancando la partida…');
+  }else if(NET.role!=='guest')JX=null;
+}
+$('joinBtn').onclick=()=>joinRoom();
+$('openBtn').onclick=openRoom;
+$('hostBtn').onclick=()=>hostRoom();
+$('rooms').onclick=e=>{const b=e.target.closest('[data-join]');if(b)joinRoom(b.dataset.join,(ROOMS||[]).find(r=>r.c===b.dataset.join))};
 $('localBtn').onclick=()=>{if(NET.peer)try{NET.peer.destroy()}catch(e){}NET=noNet();ME=null;BOT=false;setFmt();newPick()};
 $('botBtn').onclick=()=>{if(NET.peer)try{NET.peer.destroy()}catch(e){}NET=noNet();BOT=true;ME=0;setFmt('ffa2');NAMES[0]=cleanName($('myname').value,'Jugador 1');NAMES[1]='Compu';newPick()};
 $('advBtn').onclick=()=>{if(NET.peer)try{NET.peer.destroy()}catch(e){}NET=noNet();BOT=true;ME=0;setFmt('ffa2');ADV={s:0};NAMES[0]=cleanName($('myname').value,'Jugador 1');NAMES[1]=BOSS[0];newPick()};
-$('rankReset').onclick=()=>{if(confirm('¿Borrar todo el ranking de este dispositivo?')){saveRank({});renderRank()}};
+$('rankRefresh').onclick=()=>renderRank(true);
 $('myname').oninput=e=>{try{localStorage.setItem('duelo_name',e.target.value.trim())}catch(x){}};
 try{$('myname').value=localStorage.getItem('duelo_name')||''}catch(e){}
 $('menuBtn').onclick=()=>{
   const busy=phase!=='lobby'&&!(phase==='game'&&G&&G.over);
   if(busy&&!confirm(NET.role?'¿Salir al menú? Se cierra la partida para todos los jugadores.':'¿Volver al menú? Se pierde la partida en curso.'))return;
   if(NET.peer)try{NET.peer.destroy()}catch(e){}
-  NET=noNet();ME=null;BOT=false;ADV=null;botPending=false;phase='lobby';resetChat();show('lobby');netMsg('');
+  stopPub();NET=noNet();ME=null;BOT=false;ADV=null;botPending=false;phase='lobby';resetChat();show('lobby');netMsg('');
 };
 $('chatTog').onclick=()=>{chatOpen=!chatOpen;if(chatOpen)unread=0;renderChat();chatVis()};
 $('chatSend').onclick=()=>{if(sendChat($('chatIn').value))$('chatIn').value=''};
@@ -902,6 +1029,9 @@ renderChat();
 const updMute=()=>{$('muteBtn').textContent=MUTE?'🔇':'🔊';$('muteBtn').setAttribute('aria-label',MUTE?'Activar sonidos':'Silenciar sonidos')};
 $('muteBtn').onclick=()=>{MUTE=!MUTE;try{localStorage.setItem('mute',MUTE?'1':'0')}catch(e){}updMute();if(!MUTE)play('pick')};
 updMute();
+syncClock();
+setInterval(tickAll,500);setInterval(pollRooms,2500);setInterval(()=>{if(phase==='lobby'&&!document.hidden)renderRank()},20000);
+addEventListener('pagehide',()=>{if(PUB&&DB)try{fetch(DB+'/rooms/'+PUB.code+'.json',{method:'DELETE',keepalive:true})}catch(e){}});
 show('lobby');
 </script>
 </body>
